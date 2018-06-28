@@ -12,7 +12,7 @@
 #include "Arduino.h"
 #include "M2M_Quectel.h"
 
-QuectelCellular::QuectelCellular(Stream* debugStream, uint8_t powerPin)
+QuectelCellular::QuectelCellular(Print* debugStream, uint8_t powerPin)
 {
     _debugStream = debugStream;
     _powerPin = powerPin;
@@ -70,12 +70,12 @@ bool QuectelCellular::begin(Uart* uart)
             DEBUG_PRINTLN("GOT OK");
             break;
         }
-/*        flush();
+        flush();
         if (sendAndCheckReply(_AT, _AT, 1000))
         {
             DEBUG_PRINTLN("GOT AT");
             break;
-        } */
+        }
         delay(500);
         timeout-=500;
     }
@@ -100,6 +100,7 @@ bool QuectelCellular::begin(Uart* uart)
     // +QIND: PB DONE
     while (true)            // TODO: Timeout
     {
+        //DEBUG_PRINTLN(_replyBuffer);
         if (readReply(500, 1) &&
             strstr(_replyBuffer, "PB DONE"))
         {
@@ -530,6 +531,11 @@ bool QuectelCellular::setPower(bool state)
 bool QuectelCellular::getStatus()
 {
     return digitalRead(CM_STATUS);
+}
+
+void QuectelCellular::setDebugStream(Print* print)
+{
+	_debugStream = print;
 }
 
 bool QuectelCellular::sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout)

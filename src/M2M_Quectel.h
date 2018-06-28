@@ -22,16 +22,16 @@
 
 #ifdef M2M_QUECTEL_DEBUG
 // need to do some debugging...
-#define DEBUG_PRINT(...)		_debugStream->print(__VA_ARGS__)
-#define DEBUG_PRINTLN(...)		_debugStream->println(__VA_ARGS__)
+#define DEBUG_PRINT(...)		if (_debugStream != nullptr) _debugStream->print(__VA_ARGS__)
+#define DEBUG_PRINTLN(...)		if (_debugStream != nullptr) _debugStream->println(__VA_ARGS__)
 #else
 #define DEBUG_PRINT(...)
 #define DEBUG_PRINTLN(...)
 #endif
 #ifdef M2M_QUECTEL_COM_DEBUG
 // need to do some debugging...
-#define COM_DEBUG_PRINT(...)		_debugStream->print(__VA_ARGS__)
-#define COM_DEBUG_PRINTLN(...)		_debugStream->println(__VA_ARGS__)
+#define COM_DEBUG_PRINT(...)		if (_debugStream != nullptr) _debugStream->print(__VA_ARGS__)
+#define COM_DEBUG_PRINTLN(...)		if (_debugStream != nullptr) _debugStream->println(__VA_ARGS__)
 #else
 #define COM_DEBUG_PRINT(...)
 #define COM_DEBUG_PRINTLN(...)
@@ -57,10 +57,10 @@ enum NetworkRegistrationState : uint8_t
 class QuectelCellular : public Client
 {
 public:
-    QuectelCellular(Stream* debugStream = nullptr, uint8_t powerPin = NOT_A_PIN);
+    QuectelCellular(Print* debugStream = nullptr, uint8_t powerPin = NOT_A_PIN);
 
     bool begin(Uart* uart);
-    
+
 	bool setPower(bool state);
     bool getStatus();    
 
@@ -91,7 +91,7 @@ public:
     {
         return connected();
     }
-
+	void setDebugStream(Print* print);
 private:
 	bool sendAndWaitForReply(const char* command, uint16_t timeout = 1000, uint8_t lines = 1);
 	bool sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout = 1000);
@@ -100,7 +100,7 @@ private:
 
     uint8_t _powerPin;
     Uart* _uart;
-    Stream* _debugStream;
+    Print* _debugStream;
     char _replyBuffer[255];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];
