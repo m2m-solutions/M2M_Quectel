@@ -12,17 +12,14 @@
 #include "Arduino.h"
 #include "M2M_Quectel.h"
 
-QuectelCellular::QuectelCellular(Print* debugStream, uint8_t powerPin)
+QuectelCellular::QuectelCellular(Print* debugStream, int8_t powerPin, int8_t statusPin)
 {
     _debugStream = debugStream;
     _powerPin = powerPin;
+    _statusPin = statusPin;
 
     pinMode(_powerPin, OUTPUT);
-    pinMode(CM_STATUS, INPUT);
-
-    //_apn = 0;
-    //_apnusername = 0;
-    //_apnpassword = 0;
+    pinMode(_statusPin, INPUT);
 }
 
 
@@ -34,29 +31,44 @@ bool QuectelCellular::begin(Uart* uart)
 #if 1
     setPower(false);
     DEBUG_PRINT("Waiting");
-    while (getStatus())
-    {
-        DEBUG_PRINT(".");
-        delay(500);
-        flush();
+    if (_statusPin != NOT_A_PIN)
+    { 
+        int stat;
+        while (stat = getStatus())
+        {
+            DEBUG_PRINT(stat);
+            delay(500);
+            flush();
+        }
+        DEBUG_PRINTLN("");
     }
-    DEBUG_PRINTLN("");
+    else
+    {
+        delay(1000);
+    }
 #endif
 
-    bool stat = getStatus();
-    DEBUG_PRINT("Status: "); DEBUG_PRINTLN(stat);
+    if (_statusPin != NOT_A_PIN)
+    { 
+        bool stat = getStatus();
+        DEBUG_PRINT("Status: "); DEBUG_PRINTLN(stat);
 
-    if (_powerPin != NOT_A_PIN &&
-        !getStatus())
-    {
-        setPower(true);
-        DEBUG_PRINT("Waiting");
-        while (!getStatus())
+        if (_powerPin != NOT_A_PIN &&
+            !getStatus())
         {
-            DEBUG_PRINT(".");
-            delay(500);
+            setPower(true);
+            DEBUG_PRINT("Waiting");
+            while (!getStatus())
+            {
+                DEBUG_PRINT(".");
+                delay(500);
+            }
+            DEBUG_PRINTLN("");        
         }
-        DEBUG_PRINTLN("");        
+    }
+    else
+    {
+        delay(2500);
     }
 
     int16_t timeout = 7000;
@@ -250,11 +262,15 @@ uint8_t QuectelCellular::getSIMCCID(char* buffer)
     // OK
     if (sendAndWaitForReply("AT+QCCID", 1000, 3))
     {
-        const char delimiter[] = " ";
-        char * token = strtok(_replyBuffer, delimiter);
+        DEBUG_PRINT("[");  DEBUG_PRINT(_replyBuffer); DEBUG_PRINTLN("]");
+        char * token = strtok(_replyBuffer, " ");
+        DEBUG_PRINT("[");  DEBUG_PRINT(token); DEBUG_PRINTLN("]");
         if (token)
         {
-            token = strtok(nullptr, delimiter);
+            token = strtok(nullptr, " ");
+            DEBUG_PRINT("[");  DEBUG_PRINT(token); DEBUG_PRINTLN("]");
+            char* token2 = strtok(token, "\0x0a");
+            token2 = '\0';
             uint8_t len = strlen(token);
             strncpy(buffer, token, len);
             return strlen(buffer);            
@@ -530,7 +546,11 @@ bool QuectelCellular::setPower(bool state)
 
 bool QuectelCellular::getStatus()
 {
-    return digitalRead(CM_STATUS);
+    if (_statusPin == NOT_A_PIN)
+    {
+        return false;
+    }
+    return digitalRead(_statusPin) == HIGH;
 }
 
 void QuectelCellular::setDebugStream(Print* print)

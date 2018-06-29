@@ -57,7 +57,7 @@ enum NetworkRegistrationState : uint8_t
 class QuectelCellular : public Client
 {
 public:
-    QuectelCellular(Print* debugStream = nullptr, uint8_t powerPin = NOT_A_PIN);
+    QuectelCellular(Print* debugStream = nullptr, int8_t powerPin = NOT_A_PIN, int8_t statusPin = NOT_A_PIN);
 
     bool begin(Uart* uart);
 
@@ -98,7 +98,8 @@ private:
 	bool sendAndCheckReply(const char* command, const char* reply, uint16_t timeout = 1000);
     bool readReply(uint16_t timeout = 1000, uint8_t lines = 1);
 
-    uint8_t _powerPin;
+    int8_t _powerPin;
+    int8_t _statusPin;
     Uart* _uart;
     Print* _debugStream;
     char _replyBuffer[255];
