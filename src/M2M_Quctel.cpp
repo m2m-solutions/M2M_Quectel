@@ -19,7 +19,10 @@ QuectelCellular::QuectelCellular(Print* debugStream, int8_t powerPin, int8_t sta
     _statusPin = statusPin;
 
     pinMode(_powerPin, OUTPUT);
-    pinMode(_statusPin, INPUT);
+    if (statusPin != NOT_A_PIN)
+    {
+        pinMode(_statusPin, INPUT);
+    }
 }
 
 

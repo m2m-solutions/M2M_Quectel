@@ -37,14 +37,14 @@
 #define COM_DEBUG_PRINTLN(...)
 #endif
 
-enum QuectelModule : uint8_t
+enum class QuectelModule : uint8_t
 {
 	UG96 = 0,
 	BG96,
 	M95
 };
 
-enum NetworkRegistrationState : uint8_t
+enum class NetworkRegistrationState : uint8_t
 {
     NotRegistered = 0,
     Registered,
