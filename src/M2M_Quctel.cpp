@@ -260,23 +260,19 @@ uint8_t QuectelCellular::getRSSI()
 
 uint8_t QuectelCellular::getSIMCCID(char* buffer)
 {
+    char delim[] = " \n";
     // +QCCID: 898600220909A0206023
     //
     // OK
     if (sendAndWaitForReply("AT+QCCID", 1000, 3))
     {
-        DEBUG_PRINT("[");  DEBUG_PRINT(_replyBuffer); DEBUG_PRINTLN("]");
-        char * token = strtok(_replyBuffer, " ");
-        DEBUG_PRINT("[");  DEBUG_PRINT(token); DEBUG_PRINTLN("]");
+        char * token = strtok(_replyBuffer, delim);
         if (token)
         {
-            token = strtok(nullptr, " ");
-            DEBUG_PRINT("[");  DEBUG_PRINT(token); DEBUG_PRINTLN("]");
-            char* token2 = strtok(token, "\0x0a");
-            token2 = '\0';
+            token = strtok(nullptr, delim);
             uint8_t len = strlen(token);
-            strncpy(buffer, token, len);
-            return strlen(buffer);            
+            strncpy(buffer, token, len + 1);
+            return len;                        
         }
     }
     return 0;    
@@ -445,7 +441,7 @@ int QuectelCellular::available()
             {
                 char* ptr;
                 uint16_t unread = strtol(token, &ptr, 10);
-//                DEBUG_PRINT("Available: "); DEBUG_PRINTLN(unread);
+                DEBUG_PRINT("Available: "); DEBUG_PRINTLN(unread);
                 return unread;
             }
         }        
