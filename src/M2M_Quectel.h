@@ -54,6 +54,8 @@ enum class NetworkRegistrationState : uint8_t
     Roaming
 };
 
+#define WATCHDOG_CALLBACK_SIGNATURE void (*watchdogcallback)()
+
 class QuectelCellular : public Client
 {
 public:
@@ -91,12 +93,17 @@ public:
     {
         return connected();
     }
+
 	void setDebugStream(Print* print);
+
+    void setWatchdogCallback(WATCHDOG_CALLBACK_SIGNATURE);
+
 private:
 	bool sendAndWaitForReply(const char* command, uint16_t timeout = 1000, uint8_t lines = 1);
 	bool sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout = 1000);
 	bool sendAndCheckReply(const char* command, const char* reply, uint16_t timeout = 1000);
     bool readReply(uint16_t timeout = 1000, uint8_t lines = 1);
+    void callWatchdog();
 
     int8_t _powerPin;
     int8_t _statusPin;
@@ -105,6 +112,7 @@ private:
     char _replyBuffer[255];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];
+    WATCHDOG_CALLBACK_SIGNATURE;
 
     //__FlashStringHelper* _apn;
     //__FlashStringHelper* _apnusername;

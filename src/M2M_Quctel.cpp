@@ -40,6 +40,7 @@ bool QuectelCellular::begin(Uart* uart)
         while (stat = getStatus())
         {
             DEBUG_PRINT(stat);
+            callWatchdog();
             delay(500);
             flush();
         }
@@ -64,6 +65,7 @@ bool QuectelCellular::begin(Uart* uart)
             while (!getStatus())
             {
                 DEBUG_PRINT(".");
+                callWatchdog();
                 delay(500);
             }
             DEBUG_PRINTLN("");        
@@ -91,6 +93,7 @@ bool QuectelCellular::begin(Uart* uart)
             DEBUG_PRINTLN("GOT AT");
             break;
         }
+        callWatchdog();
         delay(500);
         timeout-=500;
     }
@@ -122,12 +125,15 @@ bool QuectelCellular::begin(Uart* uart)
             DEBUG_PRINTLN("Module initialized");
             break;
         }
+        callWatchdog();
     }
 
     // Wait for network registration
     NetworkRegistrationState state;
     do
     {
+        callWatchdog();
+        delay(500);
         state = getNetworkRegistration();
         switch (state)
         {
@@ -150,7 +156,6 @@ bool QuectelCellular::begin(Uart* uart)
                 DEBUG_PRINTLN("Roaming");
                 break;
         }
-        delay(1000);
     }
     while (state != NetworkRegistrationState::Registered &&
            state != NetworkRegistrationState::Roaming);
@@ -189,7 +194,7 @@ bool QuectelCellular::begin(Uart* uart)
             strcpy(_firmwareVersion, token + 10);
         }
     }
-
+    callWatchdog();
     return true;
 }
 
@@ -331,6 +336,7 @@ bool QuectelCellular::connectNetwork(const char* apn, const char* userId, const 
         DEBUG_PRINTLN("Failed to setup PDP context");
         return false;
     }
+    callWatchdog();
     // Activate PDP context
     if (!sendAndCheckReply("AT+QIACT=1", _OK, 30000))
     {
@@ -372,6 +378,7 @@ int QuectelCellular::connect(const char *host, uint16_t port)
     // +QIOPEN: 1,0
     while (true)            // TODO: Timout
     {
+        callWatchdog();
         if (readReply(500, 1) &&
             strstr(_replyBuffer, "+QIOPEN"))
         {
@@ -638,3 +645,17 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
     COM_DEBUG_PRINTLN(")");
     return true;
 }
+
+void QuectelCellular::callWatchdog()
+{
+    if (watchdogcallback != nullptr)
+    {
+        (watchdogcallback)();
+    }
+}
+
+void QuectelCellular::setWatchdogCallback(WATCHDOG_CALLBACK_SIGNATURE)
+{
+    this->watchdogcallback = watchdogcallback;
+}
+
