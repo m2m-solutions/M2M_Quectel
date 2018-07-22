@@ -10,9 +10,10 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef __M2M_Quectel_h__
 #define __M2M_Quectel_h__
-#include "Arduino.h"
+#include <Arduino.h>
 #include <SPI.h>
 #include <Ethernet.h>
+#include <M2M_Logger.h>
 
 #define NOT_A_PIN   -1
 #define FLASHSTR	__FlashStringHelper*
@@ -20,20 +21,40 @@
 #define M2M_QUECTEL_COM_DEBUG
 
 #ifdef M2M_QUECTEL_DEBUG
-// need to do some debugging...
-#define DEBUG_PRINT(...)		if (_debugStream != nullptr) _debugStream->print(__VA_ARGS__)
-#define DEBUG_PRINTLN(...)		if (_debugStream != nullptr) _debugStream->println(__VA_ARGS__)
+#define QT_ERROR(...) if (_logger != nullptr) _logger->error(__VA_ARGS__)
+#define QT_INFO(...) if (_logger != nullptr) _logger->info(__VA_ARGS__)
+#define QT_DEBUG(...) if (_logger != nullptr) _logger->debug(__VA_ARGS__)
+#define QT_TRACE(...) if (_logger != nullptr) _logger->trace(__VA_ARGS__)
+#define QT_TRACE_START(...) if (_logger != nullptr) _logger->traceStart(__VA_ARGS__)
+#define QT_TRACE_PART(...) if (_logger != nullptr) _logger->tracePart(__VA_ARGS__)
+#define QT_TRACE_END(...) if (_logger != nullptr) _logger->traceEnd(__VA_ARGS__)
 #else
-#define DEBUG_PRINT(...)
-#define DEBUG_PRINTLN(...)
+#define QT_ERROR(...)
+#define QT_INFO(...)
+#define QT_DEBUG(...)
+#define QT_TRACE(...)
+#define QT_TRACE_START(...)
+#define QT_TRACE_PART(...)
+#define QT_TRACE_END(...)
 #endif
-#ifdef M2M_QUECTEL_COM_DEBUG
-// need to do some debugging...
-#define COM_DEBUG_PRINT(...)		if (_debugStream != nullptr) _debugStream->print(__VA_ARGS__)
-#define COM_DEBUG_PRINTLN(...)		if (_debugStream != nullptr) _debugStream->println(__VA_ARGS__)
+#ifdef M2M_QUECTEL_DEBUG
+#define QT_COM_ERROR(...) if (_logger != nullptr) _logger->error(__VA_ARGS__)
+#define QT_COM_INFO(...) if (_logger != nullptr) _logger->info(__VA_ARGS__)
+#define QT_COM_DEBUG(...) if (_logger != nullptr) _logger->debug(__VA_ARGS__)
+#define QT_COM_TRACE(...) if (_logger != nullptr) _logger->trace(__VA_ARGS__)
+#define QT_COM_TRACE_START(...) if (_logger != nullptr) _logger->traceStart(__VA_ARGS__)
+#define QT_COM_TRACE_PART(...) if (_logger != nullptr) _logger->tracePart(__VA_ARGS__)
+#define QT_COM_TRACE_END(...) if (_logger != nullptr) _logger->traceEnd(__VA_ARGS__)
+#define QT_COM_TRACE_BUFFER(buffer, size) if (_logger != nullptr) _logger->tracePartHexDump(buffer, size)
 #else
-#define COM_DEBUG_PRINT(...)
-#define COM_DEBUG_PRINTLN(...)
+#define QT_COM_ERROR(...)
+#define QT_COM_INFO(...)
+#define QT_COM_DEBUG(...)
+#define QT_COM_TRACE(...)
+#define QT_COM_TRACE_START(...)
+#define QT_COM_TRACE_PART(...)
+#define QT_COM_TRACE_END(...)
+#define QT_COM_TRACE_BUFFER(buffer, size)
 #endif
 
 enum class QuectelModule : uint8_t
@@ -58,9 +79,11 @@ enum class NetworkRegistrationState : uint8_t
 class QuectelCellular : public Client
 {
 public:
-    QuectelCellular(Print* debugStream = nullptr, int8_t powerPin = NOT_A_PIN, int8_t statusPin = NOT_A_PIN);
-
+    QuectelCellular(int8_t powerPin = NOT_A_PIN, int8_t statusPin = NOT_A_PIN);
     bool begin(Uart* uart);
+
+	// Logging
+	void setLogger(Logger* logger);
 
 	bool setPower(bool state);
     bool getStatus();    
@@ -93,8 +116,6 @@ public:
         return connected();
     }
 
-	void setDebugStream(Print* print);
-
     void setWatchdogCallback(WATCHDOG_CALLBACK_SIGNATURE);
 
 private:
@@ -107,15 +128,12 @@ private:
     int8_t _powerPin;
     int8_t _statusPin;
     Uart* _uart;
-    Print* _debugStream;
+    Logger* _logger;
     char _replyBuffer[255];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];
     WATCHDOG_CALLBACK_SIGNATURE;
 
-    //__FlashStringHelper* _apn;
-    //__FlashStringHelper* _apnusername;
-    //__FlashStringHelper* _apnpassword;
     boolean httpsredirect;
     const char* _useragent = "PP";
 	const char* _AT = "AT";

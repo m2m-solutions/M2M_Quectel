@@ -9,12 +9,11 @@
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "Arduino.h"
+#include <Arduino.h>
 #include "M2M_Quectel.h"
 
-QuectelCellular::QuectelCellular(Print* debugStream, int8_t powerPin, int8_t statusPin)
+QuectelCellular::QuectelCellular(int8_t powerPin, int8_t statusPin)
 {
-    _debugStream = debugStream;
     _powerPin = powerPin;
     _statusPin = statusPin;
 
@@ -33,18 +32,18 @@ bool QuectelCellular::begin(Uart* uart)
 
 #if 1
     setPower(false);
-    DEBUG_PRINT("Waiting");
+    QT_TRACE_START("Begin... ");
     if (_statusPin != NOT_A_PIN)
     { 
         int stat;
-        while (stat = getStatus())
+        while ((stat = getStatus()))
         {
-            DEBUG_PRINT(stat);
+            QT_TRACE_PART(".");
             callWatchdog();
             delay(500);
             flush();
         }
-        DEBUG_PRINTLN("");
+        QT_TRACE_END("");
     }
     else
     {
@@ -54,21 +53,18 @@ bool QuectelCellular::begin(Uart* uart)
 
     if (_statusPin != NOT_A_PIN)
     { 
-        bool stat = getStatus();
-        DEBUG_PRINT("Status: "); DEBUG_PRINTLN(stat);
-
         if (_powerPin != NOT_A_PIN &&
             !getStatus())
         {
             setPower(true);
-            DEBUG_PRINT("Waiting");
+            QT_TRACE_START("Waiting");
             while (!getStatus())
             {
-                DEBUG_PRINT(".");
+                QT_TRACE_PART(".");
                 callWatchdog();
                 delay(500);
             }
-            DEBUG_PRINTLN("");        
+            QT_TRACE_END("");        
         }
     }
     else
@@ -78,19 +74,19 @@ bool QuectelCellular::begin(Uart* uart)
 
     int16_t timeout = 7000;
 
-	DEBUG_PRINTLN("Open communications");
+	QT_INFO("Open communications");
     while (timeout > 0) 
     {
         flush();
         if (sendAndCheckReply(_AT, _OK, 1000))
         {
-            DEBUG_PRINTLN("GOT OK");
+            QT_DEBUG("GOT OK");
             break;
         }
         flush();
         if (sendAndCheckReply(_AT, _AT, 1000))
         {
-            DEBUG_PRINTLN("GOT AT");
+            QT_DEBUG("GOT AT");
             break;
         }
         callWatchdog();
@@ -100,7 +96,7 @@ bool QuectelCellular::begin(Uart* uart)
 
     if (timeout < 0)
     {
-		DEBUG_PRINTLN("Failed to initialize cellular module");
+		QT_ERROR("Failed to initialize cellular module");
         return false;
     }
 
@@ -118,11 +114,10 @@ bool QuectelCellular::begin(Uart* uart)
     // +QIND: PB DONE
     while (true)            // TODO: Timeout
     {
-        //DEBUG_PRINTLN(_replyBuffer);
         if (readReply(500, 1) &&
             strstr(_replyBuffer, "PB DONE"))
         {
-            DEBUG_PRINTLN("Module initialized");
+            QT_INFO("Module initialized");
             break;
         }
         callWatchdog();
@@ -138,22 +133,22 @@ bool QuectelCellular::begin(Uart* uart)
         switch (state)
         {
             case NetworkRegistrationState::NotRegistered:
-                DEBUG_PRINTLN("Not registered");
+                QT_DEBUG("Not registered");
                 break;
             case NetworkRegistrationState::Registered:
-                DEBUG_PRINTLN("Registered");
+                QT_DEBUG("Registered");
                 break;
             case NetworkRegistrationState::Searching:
-                DEBUG_PRINTLN("Searching");
+                QT_DEBUG("Searching");
                 break;
             case NetworkRegistrationState::Denied:
-                DEBUG_PRINTLN("Denied");
+                QT_DEBUG("Denied");
                 break;
             case NetworkRegistrationState::Unknown:
-                DEBUG_PRINTLN("Unknown");
+                QT_DEBUG("Unknown");
                 break;
             case NetworkRegistrationState::Roaming:
-                DEBUG_PRINTLN("Roaming");
+                QT_DEBUG("Roaming");
                 break;
         }
     }
@@ -174,13 +169,13 @@ bool QuectelCellular::begin(Uart* uart)
         if (token == nullptr ||
             strcmp(token, "Quectel") != 0)
         {
-            DEBUG_PRINTLN("Not a Quectel module");
+            QT_ERROR("Not a Quectel module");
             return false;
         }
         token = strtok(nullptr, linefeed);
         if (token == nullptr)
         {
-            DEBUG_PRINTLN("Parse error");
+            QT_ERROR("Parse error");
             return false;
         }
 		if (strcmp(token, "UG96"))
@@ -188,11 +183,13 @@ bool QuectelCellular::begin(Uart* uart)
 			_moduleType = QuectelModule::UG96;
 		}
         token = strtok(nullptr, linefeed);
-                    DEBUG_PRINT("token "); DEBUG_PRINTLN(token);
+        QT_TRACE_START("token");
+        QT_TRACE_PART(token);
         if (strlen(token) > 10)
         {
             strcpy(_firmwareVersion, token + 10);
         }
+        QT_TRACE_END("");
     }
     callWatchdog();
     return true;
@@ -214,6 +211,16 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
     return 0;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// Logging
+//
+void QuectelCellular::setLogger(Logger* logger)
+{
+	_logger = logger;
+}
+
+////
 uint8_t QuectelCellular::getOperatorName(char* buffer)
 {
     // Reply is:
@@ -309,11 +316,8 @@ double QuectelCellular::getVoltage()
         char * token = strtok(_replyBuffer, delimiter);        
         if (token)
         {
-            DEBUG_PRINTLN(token);
             token = strtok(nullptr, delimiter);
-            DEBUG_PRINTLN(token);
             token = strtok(nullptr, delimiter);
-            DEBUG_PRINTLN(token);
             if (token)
             {
                 char* ptr;
@@ -333,14 +337,14 @@ bool QuectelCellular::connectNetwork(const char* apn, const char* userId, const 
     sprintf(buffer, "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1", apn, userId, password);
     if (!sendAndCheckReply(buffer, _OK, 1000))
     {
-        DEBUG_PRINTLN("Failed to setup PDP context");
+        QT_ERROR("Failed to setup PDP context");
         return false;
     }
     callWatchdog();
     // Activate PDP context
     if (!sendAndCheckReply("AT+QIACT=1", _OK, 30000))
     {
-        DEBUG_PRINTLN("Failed to activate PDP context");
+        QT_ERROR("Failed to activate PDP context");
         return false;
     }
     return true;
@@ -350,7 +354,7 @@ bool QuectelCellular::disconnectNetwork()
 {
     if (!sendAndCheckReply("AT+QIDEACT=1", _OK, 30000))
     {
-        DEBUG_PRINTLN("Failed to deactivate PDP context");
+        QT_ERROR("Failed to deactivate PDP context");
         return false;
     }
     return true;
@@ -371,7 +375,7 @@ int QuectelCellular::connect(const char *host, uint16_t port)
     sprintf(buffer, "AT+QIOPEN=1,1,\"TCP\",\"%s\",%i,0,0", host, port);
     if (!sendAndCheckReply(buffer, _OK))
     {
-        DEBUG_PRINTLN("Connection failed");
+        QT_ERROR("Connection failed");
         return false;
     }
     // Now we are waiting for connect
@@ -384,14 +388,14 @@ int QuectelCellular::connect(const char *host, uint16_t port)
         {
             if (_replyBuffer[9] != '1')
             {
-                DEBUG_PRINTLN("Connection failed");
+                QT_ERROR("Connection failed");
                 return false;
             }
-            DEBUG_PRINTLN("Connection open");
+            QT_DEBUG("Connection open");
             return true;
         }
     }
-    DEBUG_PRINTLN(_replyBuffer);
+    QT_TRACE(_replyBuffer);
     return false;
 }
 
@@ -402,25 +406,26 @@ size_t QuectelCellular::write(uint8_t value)
 
 size_t QuectelCellular::write(const uint8_t *buf, size_t size)
 {
-    //DEBUG_PRINT("Send "); DEBUG_PRINTLN(size);
     char buffer[16];
     sprintf(buffer, "AT+QISEND=1,%i", size);
-    COM_DEBUG_PRINT(" -> "); COM_DEBUG_PRINTLN(buffer);
+    QT_COM_TRACE_START(" -> ");
+    QT_COM_TRACE_PART(buffer);
+    QT_COM_TRACE_END("");
     _uart->println(buffer);
-   	COM_DEBUG_PRINT(" <- ");
     while (true)
     {
         if (_uart->available())
         {
             char c = _uart->read();
-            COM_DEBUG_PRINT(c);
             if (c == '>')
             {
                 break;
             }
         }
     }
-    COM_DEBUG_PRINTLN();
+   	QT_COM_TRACE_START(" <- ");
+    QT_COM_TRACE_BUFFER(buf, size);
+    QT_COM_TRACE_END("");
     _uart->write(buf, size);
     while (true)
     {    
@@ -430,7 +435,7 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
             return size;
         }
     }
-    DEBUG_PRINTLN("Send failed");
+    QT_ERROR("Send failed");
     return 0;
 }
 
@@ -448,7 +453,7 @@ int QuectelCellular::available()
             {
                 char* ptr;
                 uint16_t unread = strtol(token, &ptr, 10);
-                DEBUG_PRINT("Available: "); DEBUG_PRINTLN(unread);
+                QT_ERROR("Available: %i", unread);
                 return unread;
             }
         }        
@@ -478,15 +483,16 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         token = strtok(nullptr, "\n");
         char* ptr;
         uint16_t length = strtol(token, &ptr, 10);
-        DEBUG_PRINT("Data len: "); DEBUG_PRINTLN(length);
+        QT_TRACE("Data len: %i", length);
         _uart->readBytes(_replyBuffer, length);
         memcpy(buf, _replyBuffer, length);
         buf[length] = '\0';
+        QT_TRACE_START("");
         for (int i=0; i < length; i++)
         {
-            DEBUG_PRINT(buf[i], HEX); DEBUG_PRINT(" ");
+            QT_COM_TRACE_BUFFER(buffer, length);
         }
-        DEBUG_PRINTLN();
+        QT_COM_TRACE_END("");
         return length;       
     }
     return 0;
@@ -511,7 +517,7 @@ void QuectelCellular::stop()
     // AT+QICLOSE=1,10
     if (!sendAndCheckReply("AT+QICLOSE=1,10", _OK, 10000))
     {
-        DEBUG_PRINTLN("Failed to close connection");
+        QT_ERROR("Failed to close connection");
     }
 }
 
@@ -534,7 +540,7 @@ uint8_t QuectelCellular::connected()
 
 bool QuectelCellular::setPower(bool state)
 {
-	DEBUG_PRINT("setPower: "); DEBUG_PRINTLN(state);
+	QT_DEBUG("setPower: %i", state);
     if (_powerPin == NOT_A_PIN)
     {
         return false;
@@ -554,14 +560,9 @@ bool QuectelCellular::getStatus()
 {
     if (_statusPin == NOT_A_PIN)
     {
-        return false;
+        return true;
     }
     return digitalRead(_statusPin) == HIGH;
-}
-
-void QuectelCellular::setDebugStream(Print* print)
-{
-	_debugStream = print;
 }
 
 bool QuectelCellular::sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout)
@@ -572,8 +573,7 @@ bool QuectelCellular::sendAndWaitForMultilineReply(const char* command, uint8_t 
 bool QuectelCellular::sendAndWaitForReply(const char* command, uint16_t timeout, uint8_t lines)
 {
     flush();
-	COM_DEBUG_PRINT(" -> ");
-	COM_DEBUG_PRINTLN(command);
+	QT_COM_TRACE(" -> %s", command);
     _uart->println(command);
     return readReply(timeout, lines);
 }
@@ -599,7 +599,6 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
         {
             break;
         }
-
         while (_uart->available())
         {
             char c = _uart->read();
@@ -609,14 +608,13 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
                 continue;
             }
             if (linesFound > 0)
-            {
-    			COM_DEBUG_PRINT(c);
+            {    			
                 _replyBuffer[index] = c;
                 index++;
             }
             if (c == '\n')
             {
-                COM_DEBUG_PRINT(" <- "); COM_DEBUG_PRINT(linesFound); COM_DEBUG_PRINT(" - ");
+                QT_COM_TRACE(" <- %i - ", linesFound);
 				linesFound++;
             }
     		if (linesFound > lines)
@@ -637,12 +635,9 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
         delay(1);
     }
     _replyBuffer[index] = 0;
-    COM_DEBUG_PRINT(" (");
-    for (int i=0; i < index; i++)
-    {
-        COM_DEBUG_PRINT(_replyBuffer[i], HEX); COM_DEBUG_PRINT(' ');
-    }
-    COM_DEBUG_PRINTLN(")");
+    QT_COM_TRACE_START(" (");
+    QT_COM_TRACE_BUFFER(_replyBuffer, index);
+    QT_COM_TRACE_END(")");
     return true;
 }
 
