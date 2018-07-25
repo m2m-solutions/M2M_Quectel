@@ -1,7 +1,5 @@
 # M2M_Quectel
 
-Note: _This is prerelease software!_
-
 Arduino library for Quectel cellular modules.
 
 Written by Jonny Bergdahl for M2M Solutions AB. 
