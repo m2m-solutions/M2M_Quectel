@@ -518,7 +518,6 @@ void QuectelCellular::flush()
 
 void QuectelCellular::stop()
 {
-    QT_TRACE("================== STOP !!!!! ======================");
     // AT+QICLOSE=1,10
     if (!sendAndCheckReply("AT+QICLOSE=1,10", _OK, 10000))
     {
@@ -528,13 +527,11 @@ void QuectelCellular::stop()
     while (millis() < timeout)
     {
         sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3);
-        QT_TRACE("_replyBuffer: %s", _replyBuffer);
         if (_replyBuffer[0] == 'O' && _replyBuffer[1] == 'K')
         {            
-            QT_TRACE(" ---- DISCONNECTED .....");
+            QT_TRACE("Disconnected");
             return;
         }
-        QT_TRACE("_replyBuffer: %s", _replyBuffer);
         callWatchdog();
         delay(500);
     }
