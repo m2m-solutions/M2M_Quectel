@@ -37,7 +37,7 @@
 #define QT_TRACE_PART(...)
 #define QT_TRACE_END(...)
 #endif
-#ifdef M2M_QUECTEL_DEBUG
+#ifdef M2M_QUECTEL_COM_DEBUG
 #define QT_COM_ERROR(...) if (_logger != nullptr) _logger->error(__VA_ARGS__)
 #define QT_COM_INFO(...) if (_logger != nullptr) _logger->info(__VA_ARGS__)
 #define QT_COM_DEBUG(...) if (_logger != nullptr) _logger->debug(__VA_ARGS__)
