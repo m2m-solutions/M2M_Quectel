@@ -18,7 +18,7 @@
 #define NOT_A_PIN   -1
 #define FLASHSTR	__FlashStringHelper*
 #define M2M_QUECTEL_DEBUG
-#define M2M_QUECTEL_COM_DEBUG
+//#define M2M_QUECTEL_COM_DEBUG
 
 #ifdef M2M_QUECTEL_DEBUG
 #define QT_ERROR(...) if (_logger != nullptr) _logger->error(__VA_ARGS__)

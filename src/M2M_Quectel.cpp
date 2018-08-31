@@ -547,7 +547,6 @@ uint8_t QuectelCellular::connected()
     if (sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3) &&
         strstr(_replyBuffer, "+QISTATE:"))
     {
-        QT_TRACE("connected(): %s",_replyBuffer);
         char* token = strtok(_replyBuffer, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
