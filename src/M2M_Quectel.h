@@ -7,7 +7,8 @@
 //
 // Licensed under the MIT license, see the LICENSE.txt file.
 //
-////////////////////////////////////////////////////////////////////////////////////////////////
+//---------------------------------------------------------------------------------------------
+
 #ifndef __M2M_Quectel_h__
 #define __M2M_Quectel_h__
 #include <Arduino.h>
@@ -46,6 +47,7 @@
 #define QT_COM_TRACE_PART(...) if (_logger != nullptr) _logger->tracePart(__VA_ARGS__)
 #define QT_COM_TRACE_END(...) if (_logger != nullptr) _logger->traceEnd(__VA_ARGS__)
 #define QT_COM_TRACE_BUFFER(buffer, size) if (_logger != nullptr) _logger->tracePartHexDump(buffer, size)
+#define QT_COM_TRACE_ASCII(buffer, size) if (_logger != nullptr) _logger->tracePartAsciiDump(buffer, size)
 #else
 #define QT_COM_ERROR(...)
 #define QT_COM_INFO(...)
@@ -88,6 +90,7 @@ public:
 	bool setPower(bool state);
     bool getStatus();    
 
+    bool getSimInserted();
 	const char* getFirmwareVersion();
     uint8_t getIMEI(char* buffer);
     uint8_t getOperatorName(char* buffer);

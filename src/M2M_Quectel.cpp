@@ -31,31 +31,14 @@ QuectelCellular::QuectelCellular(int8_t powerPin, int8_t statusPin)
 
 bool QuectelCellular::begin(Uart* uart)
 {
-    _uart = uart;	
-	_uart->begin(115200);
+    _uart = uart;		
+    _uart->begin(115200);
 
-#if 0
+    QT_DEBUG("Powering off module");
     setPower(false);
-    QT_TRACE_START("Begin... ");
-    if (_statusPin != NOT_A_PIN)
-    { 
-        int stat;
-        while ((stat = getStatus()))
-        {
-            QT_TRACE_PART(".");
-            callWatchdog();
-            delay(500);
-            flush();
-        }
-        QT_TRACE_END("");
-    }
-    else
-    {
-        delay(1000);
-    }
-#endif
-
+    QT_DEBUG("Powering on module");
     setPower(true);
+
     QT_TRACE_START("Waiting for module");
     while (!getStatus())
     {
@@ -63,11 +46,11 @@ bool QuectelCellular::begin(Uart* uart)
         callWatchdog();
         delay(500);
     }
-    QT_TRACE_END("");        
+    QT_TRACE_END("");      
 
+
+	QT_DEBUG("Open communications");
     int16_t timeout = 7000;
-
-	QT_INFO("Open communications");
     while (timeout > 0) 
     {
         flush();
@@ -76,15 +59,9 @@ bool QuectelCellular::begin(Uart* uart)
             QT_COM_TRACE("GOT OK");
             break;
         }
-        flush();
-        if (sendAndCheckReply(_AT, _AT, 1000))
-        {
-            QT_COM_TRACE("GOT AT");
-            break;
-        }
         callWatchdog();
         delay(500);
-        timeout-=500;
+        timeout -= 500;
     }
 
     if (timeout < 0)
@@ -98,30 +75,38 @@ bool QuectelCellular::begin(Uart* uart)
     // Set verbose error messages
     sendAndCheckReply("AT+CMEE=2", _OK, 1000);
 
-    // Wait for ready. Module outputs:
-    // 
-    // +CPIN: READY
-    //
-    // +QIND: SMS DONE
-    //
-    // +QIND: PB DONE
-    while (true)            // TODO: Timeout
+    QT_DEBUG("Checking SIM card");
+    if (!getSimInserted())
+    {
+        QT_ERROR("No SIM card detected");
+        return false;
+    }
+
+    QT_DEBUG("Waiting for module initialization");
+    timeout = 5000;
+    while (timeout > 0)            
     {
         if (readReply(500, 1) &&
             strstr(_replyBuffer, "PB DONE"))
         {
-            QT_INFO("Module initialized");
+            QT_DEBUG("Module initialized");
             break;
         }
         callWatchdog();
+        delay(500);
+        timeout -= 500;
+    }
+    if (timeout < 0)
+    {
+        // Non critical error
+		QT_Debug("Failed waiting for phonebook initialization");
     }
 
     // Wait for network registration
+    QT_INFO("Waiting for network registration");
     NetworkRegistrationState state;
     do
     {
-        callWatchdog();
-        delay(500);
         state = getNetworkRegistration();
         switch (state)
         {
@@ -144,6 +129,8 @@ bool QuectelCellular::begin(Uart* uart)
                 QT_DEBUG("Roaming");
                 break;
         }
+        delay(500);
+        callWatchdog();
     }
     while (state != NetworkRegistrationState::Registered &&
            state != NetworkRegistrationState::Roaming);
@@ -176,13 +163,10 @@ bool QuectelCellular::begin(Uart* uart)
 			_moduleType = QuectelModule::UG96;
 		}
         token = strtok(nullptr, linefeed);
-        QT_COM_TRACE_START("token");
-        QT_COM_TRACE_PART(token);
         if (strlen(token) > 10)
         {
             strcpy(_firmwareVersion, token + 10);
         }
-        QT_COM_TRACE_END("");
     }
     callWatchdog();
     return true;
@@ -213,6 +197,25 @@ void QuectelCellular::setLogger(Logger* logger)
 	_logger = logger;
 }
 
+bool QuectelCellular::getSimInserted()
+{
+    // Reply is:
+    // +QSIMSTAT: 0,1
+    //
+    // OK
+    if (sendAndWaitForReply("AT+QSIMSTAT?"))
+    {
+        const char delimiter[] = ",";
+        char* token = strtok(_replyBuffer, delimiter);
+        token = strtok(nullptr, delimiter);
+        if (token)
+        {
+            return token[0] == 0x31;
+        }        
+    }
+    return false;
+}
+
 ////
 uint8_t QuectelCellular::getOperatorName(char* buffer)
 {
@@ -223,7 +226,7 @@ uint8_t QuectelCellular::getOperatorName(char* buffer)
     if (sendAndWaitForReply("AT+COPS?", 1000, 3))
     {
         const char delimiter[] = ",";
-        char * token = strtok(_replyBuffer, delimiter);
+        char* token = strtok(_replyBuffer, delimiter);
         if (token)
         {
             token = strtok(nullptr, delimiter);
@@ -330,6 +333,7 @@ bool QuectelCellular::connectNetwork(const char* apn, const char* userId, const 
     sprintf(buffer, "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1", apn, userId, password);
     if (!sendAndCheckReply(buffer, _OK, 1000))
     {
+        SerialUSB.println(_replyBuffer);
         QT_ERROR("Failed to setup PDP context");
         return false;
     }
@@ -494,7 +498,7 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         QT_COM_TRACE_START("");
         for (int i=0; i < length; i++)
         {
-            QT_COM_TRACE_BUFFER(buffer, length);
+            QT_COM_TRACE_ASCII(buffer, length);
         }
         QT_COM_TRACE_END("");
         return length;       
@@ -563,18 +567,43 @@ uint8_t QuectelCellular::connected()
 bool QuectelCellular::setPower(bool state)
 {
 	QT_DEBUG("setPower: %i", state);
-    if (_powerPin == NOT_A_PIN)
+    if (state == true)
     {
-        return false;
-    }
-    if (state)
-    {
+        if (_powerPin == NOT_A_PIN)
+        {
+            return true;
+        }
         digitalWrite(_powerPin, LOW);
         delay(300);
         digitalWrite(_powerPin, HIGH);
         return true;
     }
-    return sendAndCheckReply("AT+QPOWD", _OK, 1000);
+    else
+    {
+        QT_DEBUG("Powering down module");
+        if (!sendAndCheckReply("AT+QPOWD", _OK, 1000))
+        {
+            return false;
+        }
+        uint32_t timeout = millis() + 60000;  // max 60 seconds for a shutdown
+        while (timeout > millis())
+        {
+            if (readReply(1000, 1))
+            {
+                if (strstr(_replyBuffer, "+QIURC: \"pdpdeact\",1"))
+                {
+                    QT_DEBUG("PDP deactivated");
+                }
+                if (strstr(_replyBuffer, "POWERED DOWN"))
+                {
+                    QT_DEBUG("Module powered down");
+                    break;
+                }
+            }
+            callWatchdog();
+        }
+        return false;
+    }
 }
 
 bool QuectelCellular::getStatus()
@@ -609,10 +638,6 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 {
     uint16_t index = 0;
     uint16_t linesFound = 0;
-
-	//COM_DEBUG_PRINT("timeout "); COM_DEBUG_PRINTLN(timeout);
-	//COM_DEBUG_PRINT("lines "); COM_DEBUG_PRINTLN(lines);
-	//COM_DEBUG_PRINT(" <- ");
 
     while (timeout--)
     {
@@ -657,7 +682,7 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
     _replyBuffer[index] = 0;
     QT_COM_TRACE_START("");
     QT_COM_TRACE_PART("%i lines - ", linesFound);
-    QT_COM_TRACE_BUFFER(_replyBuffer, index);
+    QT_COM_TRACE_ASCII(_replyBuffer, index);
     QT_COM_TRACE_END("");
     return true;
 }
