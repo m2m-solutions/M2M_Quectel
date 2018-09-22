@@ -90,7 +90,7 @@ public:
 	bool setPower(bool state);
     bool getStatus();    
 
-    bool getSimInserted();
+    bool getSimPresent();
 	const char* getFirmwareVersion();
     uint8_t getIMEI(char* buffer);
     uint8_t getOperatorName(char* buffer);

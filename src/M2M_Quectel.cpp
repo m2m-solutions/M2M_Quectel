@@ -76,7 +76,7 @@ bool QuectelCellular::begin(Uart* uart)
     sendAndCheckReply("AT+CMEE=2", _OK, 1000);
 
     QT_DEBUG("Checking SIM card");
-    if (!getSimInserted())
+    if (!getSimPresent())
     {
         QT_ERROR("No SIM card detected");
         return false;
@@ -99,7 +99,7 @@ bool QuectelCellular::begin(Uart* uart)
     if (timeout < 0)
     {
         // Non critical error
-		QT_Debug("Failed waiting for phonebook initialization");
+		QT_DEBUG("Failed waiting for phonebook initialization");
     }
 
     // Wait for network registration
@@ -197,7 +197,7 @@ void QuectelCellular::setLogger(Logger* logger)
 	_logger = logger;
 }
 
-bool QuectelCellular::getSimInserted()
+bool QuectelCellular::getSimPresent()
 {
     // Reply is:
     // +QSIMSTAT: 0,1
