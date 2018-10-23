@@ -103,7 +103,7 @@ bool QuectelCellular::begin(Uart* uart)
     }
 
     // Wait for network registration
-    QT_INFO("Waiting for network registration");
+    QT_DEBUG("Waiting for network registration");
     NetworkRegistrationState state;
     do
     {
@@ -456,13 +456,16 @@ int QuectelCellular::available()
         if (token)
         {
             token = strtok(nullptr, delimiter);
-            token = strtok(nullptr, delimiter);
             if (token)
             {
-                char* ptr;
-                uint16_t unread = strtol(token, &ptr, 10);
-                QT_COM_TRACE("Available: %i", unread);
-                return unread;
+                token = strtok(nullptr, delimiter);
+                if (token)
+                {
+                    char* ptr;
+                    uint16_t unread = strtol(token, &ptr, 10);
+                    QT_COM_TRACE("Available: %i", unread);
+                    return unread;
+                }
             }
         }        
     }
@@ -522,6 +525,10 @@ void QuectelCellular::flush()
 
 void QuectelCellular::stop()
 {
+    if (!connected())
+    {
+        return;
+    }
     // AT+QICLOSE=1,10
     if (!sendAndCheckReply("AT+QICLOSE=1,10", _OK, 10000))
     {
@@ -677,6 +684,7 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
         {
             return false;
         }
+        callWatchdog();
         delay(1);
     }
     _replyBuffer[index] = 0;
