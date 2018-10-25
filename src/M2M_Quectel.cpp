@@ -50,7 +50,7 @@ bool QuectelCellular::begin(Uart* uart)
 
 
 	QT_DEBUG("Open communications");
-    int16_t timeout = 7000;
+    int32_t timeout = 7000;
     while (timeout > 0) 
     {
         flush();
@@ -96,7 +96,7 @@ bool QuectelCellular::begin(Uart* uart)
         delay(500);
         timeout -= 500;
     }
-    if (timeout < 0)
+    if (timeout <= 0)
     {
         // Non critical error
 		QT_DEBUG("Failed waiting for phonebook initialization");
@@ -104,8 +104,9 @@ bool QuectelCellular::begin(Uart* uart)
 
     // Wait for network registration
     QT_DEBUG("Waiting for network registration");
+    timeout = 60000;
     NetworkRegistrationState state;
-    do
+    while (timeout > 0)
     {
         state = getNetworkRegistration();
         switch (state)
@@ -129,11 +130,20 @@ bool QuectelCellular::begin(Uart* uart)
                 QT_DEBUG("Roaming");
                 break;
         }
-        delay(500);
         callWatchdog();
+        delay(500);
+        timeout -= 500;
+        if (state == NetworkRegistrationState::Registered ||
+           state == NetworkRegistrationState::Roaming)
+        {
+            break;
+        }
     }
-    while (state != NetworkRegistrationState::Registered &&
-           state != NetworkRegistrationState::Roaming);
+    if (timeout <= 0)
+    {
+        QT_ERROR("Network registration failed");
+        return false;
+    }
 
     if (sendAndWaitForReply("ATI", 1000, 5))
     {
