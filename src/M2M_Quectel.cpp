@@ -399,6 +399,11 @@ int QuectelCellular::connect(const char *host, uint16_t port)
                 QT_ERROR("Connection failed");
                 return false;
             }
+            if (_replyBuffer[11] != '0')
+            {
+                QT_ERROR("Connection failed with error code: %c%c%c", _replyBuffer[11], _replyBuffer[12], _replyBuffer[13]);
+                return false;
+            }
             QT_DEBUG("Connection open");
             return true;
         }
@@ -591,7 +596,7 @@ bool QuectelCellular::setPower(bool state)
             return true;
         }
         digitalWrite(_powerPin, LOW);
-        delay(300);
+        delay(2000);
         digitalWrite(_powerPin, HIGH);
         return true;
     }
