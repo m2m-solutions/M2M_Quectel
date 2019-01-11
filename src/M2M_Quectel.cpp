@@ -516,7 +516,7 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         QT_COM_TRACE_START("");
         for (int i=0; i < length; i++)
         {
-            QT_COM_TRACE_ASCII(buffer, length);
+            QT_COM_TRACE_ASCII(buf, length);
         }
         QT_COM_TRACE_END("");
         return length;       
