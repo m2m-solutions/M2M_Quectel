@@ -535,10 +535,6 @@ void QuectelCellular::flush()
 
 void QuectelCellular::stop()
 {
-    if (!connected())
-    {
-        return;
-    }
     // AT+QICLOSE=1,10
     if (!sendAndCheckReply("AT+QICLOSE=1,10", _OK, 10000))
     {
@@ -568,7 +564,8 @@ uint8_t QuectelCellular::connected()
     if (sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3) &&
         strstr(_replyBuffer, "+QISTATE:"))
     {
-        char* token = strtok(_replyBuffer, ",");
+        char* token = strtok(_replyBuffer, "+QISTATE:"
+        token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
