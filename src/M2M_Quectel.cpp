@@ -564,13 +564,16 @@ uint8_t QuectelCellular::connected()
     if (sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3) &&
         strstr(_replyBuffer, "+QISTATE:"))
     {
-        char* token = strtok(_replyBuffer, "+QISTATE:"
+        char* tokenStart = strstr(_replyBuffer, "+QISTATE:");
+        tokenStart = &_replyBuffer[tokenStart - _replyBuffer];
+        
+        char* token = strtok(tokenStart, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
-        token = strtok(nullptr, ",");
+        
         return strcmp(token, "3") == 0;        
     }
     return false;
