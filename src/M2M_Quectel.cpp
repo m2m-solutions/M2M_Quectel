@@ -226,7 +226,6 @@ bool QuectelCellular::getSimPresent()
     return false;
 }
 
-////
 uint8_t QuectelCellular::getOperatorName(char* buffer)
 {
     // Reply is:
@@ -367,7 +366,96 @@ bool QuectelCellular::disconnectNetwork()
     return true;
 }
 
-// Client interface
+// HTTP client interface
+bool QuectelCellular::httpGet(const char* url, const char* fileName)
+{
+    char buffer[16];
+    int status;
+    int size;
+    int result;
+
+    // (Uses PDP context 2)
+    // -> AT+QHTTPCFG="contextid",2
+    // <- OK
+    // -> AT+QHTTPURL=23,80
+    // <- CONNECT
+    // -> http://www.sina.com.cn
+    // <- OK
+    // -> AT+QHTTPGET=80
+    // <- OK
+    // <- +QHTTPGET: 0,200,631871
+    // -> AT+QHTTPREADFILE="RAM:1.bin",60,2
+    // <- OK
+    // <- +QHTTPREADFILE
+    if (!sendAndCheckReply("AT+QHTTPCFG=\"contextid\",1", _OK, 10000))
+    {
+        QT_ERROR("Failed to activate PDP context");
+        return false;
+    }
+    sprintf(buffer, "AT+QHTTPURL=%i,30", strlen(url));
+    if (!sendAndCheckReply(buffer, "CONNECT", 2000))
+    {
+        QT_ERROR("Failed to activate URL");
+        return false;
+    }
+    if (!sendAndCheckReply(url, "OK", 2000))
+    {
+        QT_ERROR("Failed to send URL");
+        return false;
+    }
+    if (!sendAndWaitForReply("AT+QHTTPGET=60", 60000, 3))
+    {
+        QT_ERROR("Failed to send request");
+        return false;
+    }
+    const char qHttpGet[] = "+QHTTPGET: ";
+    QT_TRACE(_replyBuffer);    
+    char * token = strtok(_replyBuffer, qHttpGet);
+    if (!token)
+    {
+        QT_ERROR("Failed to receive data");
+        return false;
+    }
+    const char delimiter[] = ",";
+    token = strtok(nullptr, delimiter);
+    token = strtok(nullptr, delimiter);
+    if (!token)
+    {
+        QT_ERROR("Failed to receive data");
+        return false;
+    }
+    status = atoi(token);
+    token = strtok(nullptr, delimiter);
+    size = atoi(token);
+    QT_COM_DEBUG("HTTP status code: %i", status);
+    QT_COM_DEBUG("HTTP response size: %i", size);
+
+    sprintf(buffer, "AT+QHTTPREADFILE=\"RAM:%s\",60,1", fileName);
+    if (!sendAndWaitForReply(buffer, 60000, 3))
+    {
+        QT_ERROR("Failed to read response");
+        return false;
+    }
+    const char qReadFile[] = "+QHTTPREADFILE: ";
+//    QT_TRACE(_replyBuffer);    
+    token = strtok(_replyBuffer, qReadFile);
+    if (!token)
+    {
+        QT_ERROR("Failed to save response");
+        return false;
+    }
+    token = strtok(nullptr, delimiter);
+    result = atoi(token);
+    QT_COM_DEBUG("HTTP read response result: %i", result);
+    if (result != 0)
+    {
+        QT_ERROR("Failed to save response, error %i", result);
+        return false;
+    }
+    return true;
+}
+
+// TCP client interface
 int QuectelCellular::connect(IPAddress ip, uint16_t port)
 {
     char buffer[16];

@@ -102,7 +102,10 @@ public:
     bool connectNetwork(const char* apn, const char* userid, const char* password);
     bool disconnectNetwork();
 
-    // Client interface
+    // HTTP client interface
+    bool httpGet(const char* url, const char* fileName);
+
+    // TCP Client interface
     int connect(IPAddress ip, uint16_t port);
     int connect(const char *host, uint16_t port);
     size_t write(uint8_t);
