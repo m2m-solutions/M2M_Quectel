@@ -387,11 +387,39 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
     // -> AT+QHTTPREADFILE="RAM:1.bin",60,2
     // <- OK
     // <- +QHTTPREADFILE
+    bool ssl = strstr(url, "https://") != nullptr;
+
     if (!sendAndCheckReply("AT+QHTTPCFG=\"contextid\",1", _OK, 10000))
     {
         QT_ERROR("Failed to activate PDP context");
         return false;
     }
+
+    if (ssl)
+    {
+        QT_TRACE("Enabling SSL support");
+        if (!sendAndCheckReply("AT+QHTTPCFG=\"sslctxid\",1", _OK, 10000))
+        {
+            QT_ERROR("Failed to activate SSL context ID");
+            return false;
+        }
+        if (!sendAndCheckReply("AT+QSSLCFG=\"sslversion\",1,3", _OK, 10000))    // Set TLS 1.2
+        {
+            QT_ERROR("Failed to set TLS version");
+            return false;
+        }
+        if (!sendAndCheckReply("AT+QSSLCFG=\"ciphersuite\",1,\"0xFFFF\"", _OK, 10000))  // Allow all
+        {
+            QT_ERROR("Failed to set cipher suites");
+            return false;
+        }
+        if (!sendAndCheckReply("AT+QSSLCFG=\"seclevel\",1,0", _OK, 10000))
+        {
+            QT_ERROR("Failed to set security level");
+            return false;
+        }
+    }
+
     sprintf(buffer, "AT+QHTTPURL=%i,30", strlen(url));
     if (!sendAndCheckReply(buffer, "CONNECT", 2000))
     {
