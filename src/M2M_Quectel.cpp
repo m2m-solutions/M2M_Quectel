@@ -483,7 +483,10 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
     return true;
 }
 
+///////////////////////////////////////////////////////////
+//
 // TCP client interface
+//
 int QuectelCellular::connect(IPAddress ip, uint16_t port)
 {
     char buffer[16];
@@ -535,6 +538,8 @@ size_t QuectelCellular::write(uint8_t value)
 
 size_t QuectelCellular::write(const uint8_t *buf, size_t size)
 {
+    // TODO: Max 1460 bytes can be sent in one +QISEND session
+    // Add a loop
     char buffer[16];
     sprintf(buffer, "AT+QISEND=1,%i", size);
     QT_COM_TRACE_START(" -> ");
@@ -695,6 +700,241 @@ uint8_t QuectelCellular::connected()
     return false;
 }
 
+///////////////////////////////////////////////////////////
+//
+// File client interface
+//
+FILE_HANDLE QuectelCellular::openFile(const char* fileName, bool overWrite)
+{
+    // AT+QFOPEN="RAM:file.ext",0
+    // +QFOPEN:3000
+    //
+    // OK
+    char buffer[32];
+    sprintf(buffer,"AT+QFOPEN=\"RAM:%s\",%i", fileName, overWrite ? 1 : 0);
+    if (!sendAndWaitForReply(buffer, 1000, 3))
+    {
+        QT_ERROR("Timeout opening file");
+        return NOT_A_FILE_HANDLE;
+    }
+    char* token = strtok(_replyBuffer, "+QFOPEN: ");
+    if (token)
+    {
+        uint32_t result = atoi(token);
+        return result;
+    }
+    return NOT_A_FILE_HANDLE;
+}
+
+bool QuectelCellular::readFile(FILE_HANDLE fileHandle, uint8_t* buffer, uint32_t length)
+{
+    // AT+QFREAD=3000,10
+    // CONNECT
+    // Read data
+    //
+    // OK
+    char command[32];
+    sprintf(command,"AT+QFREAD=%li,%lu", fileHandle, length);
+    if (!sendAndCheckReply(command, _CONNECT, 1000))
+    {
+        QT_ERROR("Timeout for read command");
+        return false;
+    }
+    for (uint32_t i=0; i < length; i++)
+    {
+        uint32_t timeout = 1000;
+        while (!_uart->available())
+        {
+            timeout--;
+            delay(1);
+        }
+        buffer[i] = _uart->read();
+    }
+    if (!readReply(1000, 1))
+    {
+        QT_ERROR("No reply after read");
+        return false;
+    }
+    return checkResult();
+}
+
+bool QuectelCellular::writeFile(FILE_HANDLE fileHandle, const uint8_t* buffer, uint32_t length)
+{
+    // AT+QFWRITE=3000,10
+    // CONNECT
+    // write 10 bytes
+    // +QFWRITE(10,10)
+    char command[32];
+    sprintf(command,"AT+QFWRITE=%li,%lu", fileHandle, length);
+    if (sendAndCheckReply(command, _CONNECT, 1000))
+    {
+        for (uint32_t i=0; i < length; i++)
+        {
+            _uart->write(buffer[i]);
+        }
+        if (!readReply(1000, 3))
+        {
+            QT_ERROR("No reply after write");
+            return false;
+        }
+        return (strstr(_replyBuffer, "+QFWRITE:") != nullptr);
+    }
+    return false;
+}
+
+bool QuectelCellular::seekFile(FILE_HANDLE fileHandle, uint32_t length)
+{
+    // AT+QFSEEK=3000,0,0
+    // OK
+    char buffer[32];
+    sprintf(buffer,"AT+QFSEEK=%li,%lu,0", fileHandle, length);
+    if (!sendAndCheckReply(buffer, _OK, 1000))
+    {
+        QT_ERROR("Seek error: %s", _replyBuffer);
+        return false;
+    }
+    return checkResult();
+}
+
+uint32_t QuectelCellular::getFilePosition(FILE_HANDLE fileHandle)
+{
+    // AT+QFPOSITION=3000
+    // +QFPOSITION: 123
+    //
+    // OK
+    char command[32];
+    sprintf(command, "AT+QFPOSITION=%li", fileHandle);
+    if (!sendAndWaitForReply(command, 1000, 3))
+    {
+        QT_ERROR("File position error: %s", _replyBuffer);
+        return -1;
+    }
+    char* token = strtok(_replyBuffer, "+QFPOSITION: ");
+    if (!token)
+    {
+        QT_ERROR("Get position error: %s", _replyBuffer);
+        return -1;
+    }
+    uint32_t result = atoi(token);
+    return result;
+}
+
+bool QuectelCellular::truncateFile(FILE_HANDLE fileHandle)
+{
+    // AT+QFTUCAT=3000
+    // OK
+    char command[32];
+    sprintf(command, "AT+QFTUCAT=%li", fileHandle);
+    if (!sendAndCheckReply(command, _OK, 1000))
+    {
+        QT_ERROR("Timeout deleting file: %s", _replyBuffer);
+        return false;
+    }
+    return checkResult();
+}
+
+bool QuectelCellular::closeFile(FILE_HANDLE fileHandle)
+{
+    // AT+QFCLOSE=3000
+    // OK
+    char command[32];
+    sprintf(command, "AT+QFCLOSE=%li", fileHandle);
+    if (!sendAndCheckReply(command, _OK, 1000))
+    {
+        QT_ERROR("Timeout closing file: %s", _replyBuffer);
+        return false;
+    }
+    return checkResult();
+}
+
+// TODO: Not tested
+bool QuectelCellular::uploadFile(const char* fileName, const uint8_t* buffer, uint32_t length)
+{
+    // AT+QFUPL="RAM:test1.txt",10
+    // CONNECT
+    // <data>
+    // +QFUPL:300,B34A
+    char command[32];
+    sprintf(command, "AT+QFUPL=\"RAM:%s\",%lu", fileName, length);
+    if (!sendAndWaitForReply(command, 1000, 2))
+    {
+        QT_ERROR("No response to upload command");
+        return false;        
+    }
+    if (!strstr(_replyBuffer, "CONNECT"))
+    {
+        QT_ERROR(_replyBuffer);
+        return false;
+    }
+    for (uint32_t i = 0; i < length; i++)
+    {
+        _uart->print(buffer[i]);
+    }
+    if (!readReply(1000, 2))
+    {
+        QT_ERROR("No reponse after upload");
+    }
+    return checkResult();
+}
+
+// TODO: Not tested
+bool QuectelCellular::downloadFile(const char* fileName, uint8_t* buffer, uint32_t length)
+{
+    // AT+QFDWL="RAM:test.txt"
+    // CONNECT
+    // <read data>
+    // +QFDWL: 10,613e
+    char command[32];
+    sprintf(command, "AT+QFDWL=\"RAM:%s\",%lu", fileName, length);
+    if (!sendAndWaitForReply(command, 1000, 2))
+    {
+        QT_ERROR("No response to download command");
+        return false;        
+    }
+    if (!strstr(_replyBuffer, "CONNECT"))
+    {
+        QT_ERROR(_replyBuffer);
+        return false;
+    }
+    for (uint32_t i = 0; i < length; i++)
+    {
+        uint32_t timeout = 1000;
+        while (timeout--)
+        {
+            while (_uart->available())
+            {
+                buffer[i] = _uart->read();
+            }
+            delay(1);
+        }
+    }
+    if (!readReply(1000, 2))
+    {
+        QT_ERROR("No reponse after download");
+    }
+    return (strstr(_replyBuffer, "+QFDWL:") != nullptr);
+}
+
+// TODO: Not implemented
+uint32_t QuectelCellular::getFileSize(const char* fileName)
+{    
+    return 0;
+}
+
+bool QuectelCellular::deleteFile(const char* fileName)
+{
+    // AT+QFDEL:"RAM:file.txt"
+    // OK
+    char command[32];
+    sprintf(command, "AT+QFDEL=\"RAM:%s\"", fileName);
+    if (!sendAndCheckReply(command, _OK, 1000))
+    {
+        QT_ERROR("Timeout deleting file: %s", _replyBuffer);
+        return false;
+    }
+    return checkResult();
+}
+
 // Private
 
 bool QuectelCellular::setPower(bool state)
@@ -746,6 +986,11 @@ bool QuectelCellular::getStatus()
         return true;
     }
     return digitalRead(_statusPin) == HIGH;
+}
+
+int8_t QuectelCellular::getLastError()
+{
+    return _lastError;
 }
 
 bool QuectelCellular::sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout)
@@ -819,6 +1064,33 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
     QT_COM_TRACE_ASCII(_replyBuffer, index);
     QT_COM_TRACE_END("");
     return true;
+}
+
+bool QuectelCellular::checkResult()
+{   
+    // CheckResult returns one of these:
+    // true    OK
+    // false   Unknown result
+    // false  CME Error
+    //
+    char* token = strstr(_replyBuffer, _OK);
+    if (token)
+    {
+        //QT_TRACE("*OK - %s", _replyBuffer);
+        _lastError = 0;
+        return true;
+    }
+    token = strstr(_replyBuffer, _CME_ERROR);
+    if (!token)
+    {
+        //QT_TRACE("*NO CME ERROR: %s", _replyBuffer);
+        _lastError = -1;
+        return false;
+    }
+    //QT_TRACE("*CME ERROR: %s", _replyBuffer);
+    token = strtok(_replyBuffer, _CME_ERROR);
+    _lastError = atoi(token);
+    return false;
 }
 
 void QuectelCellular::callWatchdog()
