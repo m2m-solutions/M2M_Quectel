@@ -87,7 +87,7 @@ bool QuectelCellular::begin(Uart* uart)
     while (timeout > 0)            
     {
         if (readReply(500, 1) &&
-            strstr(_replyBuffer, "PB DONE"))
+            strstr(_buffer, "PB DONE"))
         {
             QT_DEBUG("Module initialized");
             break;
@@ -155,7 +155,7 @@ bool QuectelCellular::begin(Uart* uart)
         // OK
         
         const char linefeed[] = "\n";
-        char * token = strtok(_replyBuffer, linefeed);
+        char * token = strtok(_buffer, linefeed);
         if (token == nullptr ||
             strcmp(token, "Quectel") != 0)
         {
@@ -191,7 +191,7 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
 {
     if (sendAndWaitForReply("AT+GSN"))
     {
-        strncpy(buffer, _replyBuffer, 15);
+        strncpy(buffer, _buffer, 15);
         buffer[15] = 0;        
         return strlen(buffer);
     }
@@ -216,7 +216,7 @@ bool QuectelCellular::getSimPresent()
     if (sendAndWaitForReply("AT+QSIMSTAT?"))
     {
         const char delimiter[] = ",";
-        char* token = strtok(_replyBuffer, delimiter);
+        char* token = strtok(_buffer, delimiter);
         token = strtok(nullptr, delimiter);
         if (token)
         {
@@ -235,7 +235,7 @@ uint8_t QuectelCellular::getOperatorName(char* buffer)
     if (sendAndWaitForReply("AT+COPS?", 1000, 3))
     {
         const char delimiter[] = ",";
-        char* token = strtok(_replyBuffer, delimiter);
+        char* token = strtok(_buffer, delimiter);
         if (token)
         {
             token = strtok(nullptr, delimiter);
@@ -261,7 +261,7 @@ uint8_t QuectelCellular::getRSSI()
     // OK
     if (sendAndWaitForReply("AT+CSQ", 1000, 3))
     {        
-        char * token = strtok(_replyBuffer, " ");
+        char * token = strtok(_buffer, " ");
         if (token)
         {
             token = strtok(nullptr, ",");
@@ -283,7 +283,7 @@ uint8_t QuectelCellular::getSIMCCID(char* buffer)
     // OK
     if (sendAndWaitForReply("AT+QCCID", 1000, 3))
     {
-        char * token = strtok(_replyBuffer, delim);
+        char * token = strtok(_buffer, delim);
         if (token)
         {
             token = strtok(nullptr, delim);
@@ -300,7 +300,7 @@ NetworkRegistrationState QuectelCellular::getNetworkRegistration()
     if (sendAndWaitForReply("AT+CREG?", 1000, 3))   
     {
         const char delimiter[] = ",";
-        char * token = strtok(_replyBuffer, delimiter);
+        char * token = strtok(_buffer, delimiter);
         if (token)
         {
             token = strtok(nullptr, delimiter);
@@ -318,7 +318,7 @@ double QuectelCellular::getVoltage()
     if (sendAndWaitForReply("AT+CBC", 1000, 3))
     {
         const char delimiter[] = ",";
-        char * token = strtok(_replyBuffer, delimiter);        
+        char * token = strtok(_buffer, delimiter);        
         if (token)
         {
             token = strtok(nullptr, delimiter);
@@ -336,13 +336,10 @@ double QuectelCellular::getVoltage()
 
 bool QuectelCellular::connectNetwork(const char* apn, const char* userId, const char* password)
 {
-    char buffer[64];
-
     // First set up PDP context
-    sprintf(buffer, "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1", apn, userId, password);
-    if (!sendAndCheckReply(buffer, _OK, 1000))
+    sprintf(_buffer, "AT+QICSGP=1,1,\"%s\",\"%s\",\"%s\",1", apn, userId, password);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
-        SerialUSB.println(_replyBuffer);
         QT_ERROR("Failed to setup PDP context");
         return false;
     }
@@ -369,7 +366,6 @@ bool QuectelCellular::disconnectNetwork()
 // HTTP client interface
 bool QuectelCellular::httpGet(const char* url, const char* fileName)
 {
-    char buffer[16];
     int status;
     int size;
     int result;
@@ -420,8 +416,8 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
         }
     }
 
-    sprintf(buffer, "AT+QHTTPURL=%i,30", strlen(url));
-    if (!sendAndCheckReply(buffer, "CONNECT", 2000))
+    sprintf(_buffer, "AT+QHTTPURL=%i,30", strlen(url));
+    if (!sendAndCheckReply(_buffer, "CONNECT", 2000))
     {
         QT_ERROR("Failed to activate URL");
         return false;
@@ -437,8 +433,7 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
         return false;
     }
     const char qHttpGet[] = "+QHTTPGET: ";
-    QT_TRACE(_replyBuffer);    
-    char * token = strtok(_replyBuffer, qHttpGet);
+    char * token = strtok(_buffer, qHttpGet);
     if (!token)
     {
         QT_ERROR("Failed to receive data");
@@ -455,18 +450,16 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
     status = atoi(token);
     token = strtok(nullptr, delimiter);
     size = atoi(token);
-    QT_COM_DEBUG("HTTP status code: %i", status);
-    QT_COM_DEBUG("HTTP response size: %i", size);
+    QT_COM_DEBUG("HTTP status code: %i, size: %i", status, size);
 
-    sprintf(buffer, "AT+QHTTPREADFILE=\"RAM:%s\",60,1", fileName);
-    if (!sendAndWaitForReply(buffer, 60000, 3))
+    sprintf(_buffer, "AT+QHTTPREADFILE=\"RAM:%s\",60,1", fileName);
+    if (!sendAndWaitForReply(_buffer, 60000, 3))
     {
         QT_ERROR("Failed to read response");
         return false;
     }
     const char qReadFile[] = "+QHTTPREADFILE: ";
-//    QT_TRACE(_replyBuffer);    
-    token = strtok(_replyBuffer, qReadFile);
+    token = strtok(_buffer, qReadFile);
     if (!token)
     {
         QT_ERROR("Failed to save response");
@@ -489,17 +482,15 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
 //
 int QuectelCellular::connect(IPAddress ip, uint16_t port)
 {
-    char buffer[16];
-    sprintf(buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);    
-    return connect(buffer, port);
+    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);    
+    return connect(_buffer, port);
 }
 
 int QuectelCellular::connect(const char *host, uint16_t port)
 {
     // AT+QIOPEN=1,1,"TCP","220.180.239.201",8713,0,0
-    char buffer[64];
-    sprintf(buffer, "AT+QIOPEN=1,1,\"TCP\",\"%s\",%i,0,0", host, port);
-    if (!sendAndCheckReply(buffer, _OK))
+    sprintf(_buffer, "AT+QIOPEN=1,1,\"TCP\",\"%s\",%i,0,0", host, port);
+    if (!sendAndCheckReply(_buffer, _OK))
     {
         QT_ERROR("Connection failed");
         return false;
@@ -511,9 +502,9 @@ int QuectelCellular::connect(const char *host, uint16_t port)
     {
         callWatchdog();
         if (readReply(500, 1) &&
-            strstr(_replyBuffer, "+QIOPEN"))
+            strstr(_buffer, "+QIOPEN"))
         {
-            if (_replyBuffer[9] != '1')
+            if (_buffer[9] != '1')
             {
                 QT_ERROR("Connection failed");
                 return false;
@@ -527,7 +518,7 @@ int QuectelCellular::connect(const char *host, uint16_t port)
                 return false;
         }
     }
-    QT_TRACE(_replyBuffer);
+    QT_TRACE(_buffer);
     return false;
 }
 
@@ -540,12 +531,11 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
 {
     // TODO: Max 1460 bytes can be sent in one +QISEND session
     // Add a loop
-    char buffer[16];
-    sprintf(buffer, "AT+QISEND=1,%i", size);
+    sprintf(_buffer, "AT+QISEND=1,%i", size);
     QT_COM_TRACE_START(" -> ");
-    QT_COM_TRACE_PART(buffer);
+    QT_COM_TRACE_PART(_buffer);
     QT_COM_TRACE_END("");
-    _uart->println(buffer);
+    _uart->println(_buffer);
     uint32_t timeout = millis() + 5000;
     bool success = false;
     while (millis() < timeout)
@@ -570,7 +560,7 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
     QT_COM_TRACE_END("");
     _uart->write(buf, size);
     if (readReply(5000, 1) &&
-        strstr(_replyBuffer, "SEND OK"))
+        strstr(_buffer, "SEND OK"))
     {
         return size;
     }    
@@ -583,7 +573,7 @@ int QuectelCellular::available()
     if (sendAndWaitForReply("AT+QIRD=1,0", 1000, 3))
     {
         const char delimiter[] = ",";
-        char * token = strtok(_replyBuffer, delimiter);                
+        char * token = strtok(_buffer, delimiter);                
         if (token)
         {
             token = strtok(nullptr, delimiter);
@@ -612,28 +602,24 @@ int QuectelCellular::read()
 
 int QuectelCellular::read(uint8_t *buf, size_t size)
 {
-    char buffer[16];
-    sprintf(buffer, "AT+QIRD=1,%i", size);
-    if (sendAndWaitForReply(buffer, 1000, 1) &&
-        strstr(_replyBuffer, "+QIRD:"))
+    sprintf(_buffer, "AT+QIRD=1,%i", size);
+    if (sendAndWaitForReply(_buffer, 1000, 1) &&
+        strstr(_buffer, "+QIRD:"))
     {        
         // +QIRD: <len>
         // <data>
         //
         // OK
-        char* token = strtok(_replyBuffer, " ");
+        char* token = strtok(_buffer, " ");
         token = strtok(nullptr, "\n");
         char* ptr;
         uint16_t length = strtol(token, &ptr, 10);
         QT_COM_TRACE("Data len: %i", length);
-        _uart->readBytes(_replyBuffer, length);
-        memcpy(buf, _replyBuffer, length);
+        _uart->readBytes(_buffer, length);
+        memcpy(buf, _buffer, length);
         buf[length] = '\0';
         QT_COM_TRACE_START("");
-        for (int i=0; i < length; i++)
-        {
-            QT_COM_TRACE_ASCII(buffer, length);
-        }
+        QT_COM_TRACE_ASCII(_buffer, length);
         QT_COM_TRACE_END("");
         return length;       
     }
@@ -665,7 +651,7 @@ void QuectelCellular::stop()
     while (millis() < timeout)
     {
         sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3);
-        if (_replyBuffer[0] == 'O' && _replyBuffer[1] == 'K')
+        if (_buffer[0] == 'O' && _buffer[1] == 'K')
         {            
             QT_TRACE("Disconnected");
             return;
@@ -683,10 +669,10 @@ uint8_t QuectelCellular::connected()
     // OK
     //
     if (sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3) &&
-        strstr(_replyBuffer, "+QISTATE:"))
+        strstr(_buffer, "+QISTATE:"))
     {
-        char* tokenStart = strstr(_replyBuffer, "+QISTATE:");
-        tokenStart = &_replyBuffer[tokenStart - _replyBuffer];
+        char* tokenStart = strstr(_buffer, "+QISTATE:");
+        tokenStart = &_buffer[tokenStart - _buffer];
         
         char* token = strtok(tokenStart, ",");
         token = strtok(nullptr, ",");
@@ -710,14 +696,13 @@ FILE_HANDLE QuectelCellular::openFile(const char* fileName, bool overWrite)
     // +QFOPEN:3000
     //
     // OK
-    char buffer[32];
-    sprintf(buffer,"AT+QFOPEN=\"RAM:%s\",%i", fileName, overWrite ? 1 : 0);
-    if (!sendAndWaitForReply(buffer, 1000, 3))
+    sprintf(_buffer,"AT+QFOPEN=\"RAM:%s\",%i", fileName, overWrite ? 1 : 0);
+    if (!sendAndWaitForReply(_buffer, 1000, 3))
     {
         QT_ERROR("Timeout opening file");
         return NOT_A_FILE_HANDLE;
     }
-    char* token = strtok(_replyBuffer, "+QFOPEN: ");
+    char* token = strtok(_buffer, "+QFOPEN: ");
     if (token)
     {
         uint32_t result = atoi(token);
@@ -733,9 +718,8 @@ bool QuectelCellular::readFile(FILE_HANDLE fileHandle, uint8_t* buffer, uint32_t
     // Read data
     //
     // OK
-    char command[32];
-    sprintf(command,"AT+QFREAD=%li,%lu", fileHandle, length);
-    if (!sendAndCheckReply(command, _CONNECT, 1000))
+    sprintf(_buffer, "AT+QFREAD=%li,%lu", fileHandle, length);
+    if (!sendAndCheckReply(_buffer, _CONNECT, 1000))
     {
         QT_ERROR("Timeout for read command");
         return false;
@@ -764,9 +748,8 @@ bool QuectelCellular::writeFile(FILE_HANDLE fileHandle, const uint8_t* buffer, u
     // CONNECT
     // write 10 bytes
     // +QFWRITE(10,10)
-    char command[32];
-    sprintf(command,"AT+QFWRITE=%li,%lu", fileHandle, length);
-    if (sendAndCheckReply(command, _CONNECT, 1000))
+    sprintf(_buffer, "AT+QFWRITE=%li,%lu", fileHandle, length);
+    if (sendAndCheckReply(_buffer, _CONNECT, 1000))
     {
         for (uint32_t i=0; i < length; i++)
         {
@@ -777,7 +760,7 @@ bool QuectelCellular::writeFile(FILE_HANDLE fileHandle, const uint8_t* buffer, u
             QT_ERROR("No reply after write");
             return false;
         }
-        return (strstr(_replyBuffer, "+QFWRITE:") != nullptr);
+        return (strstr(_buffer, "+QFWRITE:") != nullptr);
     }
     return false;
 }
@@ -786,11 +769,10 @@ bool QuectelCellular::seekFile(FILE_HANDLE fileHandle, uint32_t length)
 {
     // AT+QFSEEK=3000,0,0
     // OK
-    char buffer[32];
-    sprintf(buffer,"AT+QFSEEK=%li,%lu,0", fileHandle, length);
-    if (!sendAndCheckReply(buffer, _OK, 1000))
+    sprintf(_buffer,"AT+QFSEEK=%li,%lu,0", fileHandle, length);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
-        QT_ERROR("Seek error: %s", _replyBuffer);
+        QT_ERROR("Seek error: %s", _buffer);
         return false;
     }
     return checkResult();
@@ -802,17 +784,16 @@ uint32_t QuectelCellular::getFilePosition(FILE_HANDLE fileHandle)
     // +QFPOSITION: 123
     //
     // OK
-    char command[32];
-    sprintf(command, "AT+QFPOSITION=%li", fileHandle);
-    if (!sendAndWaitForReply(command, 1000, 3))
+    sprintf(_buffer, "AT+QFPOSITION=%li", fileHandle);
+    if (!sendAndWaitForReply(_buffer, 1000, 3))
     {
-        QT_ERROR("File position error: %s", _replyBuffer);
+        QT_ERROR("File position error: %s", _buffer);
         return -1;
     }
-    char* token = strtok(_replyBuffer, "+QFPOSITION: ");
+    char* token = strtok(_buffer, "+QFPOSITION: ");
     if (!token)
     {
-        QT_ERROR("Get position error: %s", _replyBuffer);
+        QT_ERROR("Get position error: %s", _buffer);
         return -1;
     }
     uint32_t result = atoi(token);
@@ -823,11 +804,10 @@ bool QuectelCellular::truncateFile(FILE_HANDLE fileHandle)
 {
     // AT+QFTUCAT=3000
     // OK
-    char command[32];
-    sprintf(command, "AT+QFTUCAT=%li", fileHandle);
-    if (!sendAndCheckReply(command, _OK, 1000))
+    sprintf(_buffer, "AT+QFTUCAT=%li", fileHandle);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
-        QT_ERROR("Timeout deleting file: %s", _replyBuffer);
+        QT_ERROR("Timeout deleting file: %s", _buffer);
         return false;
     }
     return checkResult();
@@ -837,11 +817,10 @@ bool QuectelCellular::closeFile(FILE_HANDLE fileHandle)
 {
     // AT+QFCLOSE=3000
     // OK
-    char command[32];
-    sprintf(command, "AT+QFCLOSE=%li", fileHandle);
-    if (!sendAndCheckReply(command, _OK, 1000))
+    sprintf(_buffer, "AT+QFCLOSE=%li", fileHandle);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
-        QT_ERROR("Timeout closing file: %s", _replyBuffer);
+        QT_ERROR("Timeout closing file: %s", _buffer);
         return false;
     }
     return checkResult();
@@ -854,16 +833,15 @@ bool QuectelCellular::uploadFile(const char* fileName, const uint8_t* buffer, ui
     // CONNECT
     // <data>
     // +QFUPL:300,B34A
-    char command[32];
-    sprintf(command, "AT+QFUPL=\"RAM:%s\",%lu", fileName, length);
-    if (!sendAndWaitForReply(command, 1000, 2))
+    sprintf(_buffer, "AT+QFUPL=\"RAM:%s\",%lu", fileName, length);
+    if (!sendAndWaitForReply(_buffer, 1000, 2))
     {
         QT_ERROR("No response to upload command");
         return false;        
     }
-    if (!strstr(_replyBuffer, "CONNECT"))
+    if (!strstr(_buffer, "CONNECT"))
     {
-        QT_ERROR(_replyBuffer);
+        QT_ERROR(_buffer);
         return false;
     }
     for (uint32_t i = 0; i < length; i++)
@@ -884,16 +862,15 @@ bool QuectelCellular::downloadFile(const char* fileName, uint8_t* buffer, uint32
     // CONNECT
     // <read data>
     // +QFDWL: 10,613e
-    char command[32];
-    sprintf(command, "AT+QFDWL=\"RAM:%s\",%lu", fileName, length);
-    if (!sendAndWaitForReply(command, 1000, 2))
+    sprintf(_buffer, "AT+QFDWL=\"RAM:%s\",%lu", fileName, length);
+    if (!sendAndWaitForReply(_buffer, 1000, 2))
     {
         QT_ERROR("No response to download command");
         return false;        
     }
-    if (!strstr(_replyBuffer, "CONNECT"))
+    if (!strstr(_buffer, "CONNECT"))
     {
-        QT_ERROR(_replyBuffer);
+        QT_ERROR(_buffer);
         return false;
     }
     for (uint32_t i = 0; i < length; i++)
@@ -912,24 +889,41 @@ bool QuectelCellular::downloadFile(const char* fileName, uint8_t* buffer, uint32
     {
         QT_ERROR("No reponse after download");
     }
-    return (strstr(_replyBuffer, "+QFDWL:") != nullptr);
+    return (strstr(_buffer, "+QFDWL:") != nullptr);
 }
 
-// TODO: Not implemented
 uint32_t QuectelCellular::getFileSize(const char* fileName)
 {    
-    return 0;
+    // AT+QFLST:"RAM:file.txt"
+    // +QFLST:"RAM:file.txt"",734"
+    // 
+    // OK
+    sprintf(_buffer, "AT+QFLST=\"RAM:%s\"", fileName);
+    if (!sendAndWaitForReply(_buffer, 1000, 2))
+    {
+        QT_ERROR("Get file size error 1: %s", _buffer);
+        return -1;
+    }
+    char* token = strtok(_buffer, "+QFLST: ");
+    if (!token)
+    {
+        QT_ERROR("Get file size error: %s", _buffer);
+        return -1;
+    }
+    token = strtok(nullptr, ",");
+    token = strtok(nullptr, "\n");
+    uint32_t result = atoi(token);
+    return result;
 }
 
 bool QuectelCellular::deleteFile(const char* fileName)
 {
     // AT+QFDEL:"RAM:file.txt"
     // OK
-    char command[32];
-    sprintf(command, "AT+QFDEL=\"RAM:%s\"", fileName);
-    if (!sendAndCheckReply(command, _OK, 1000))
+    sprintf(_buffer, "AT+QFDEL=\"RAM:%s\"", fileName);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
-        QT_ERROR("Timeout deleting file: %s", _replyBuffer);
+        QT_ERROR("Timeout deleting file: %s", _buffer);
         return false;
     }
     return checkResult();
@@ -963,11 +957,11 @@ bool QuectelCellular::setPower(bool state)
         {
             if (readReply(1000, 1))
             {
-                if (strstr(_replyBuffer, "+QIURC: \"pdpdeact\",1"))
+                if (strstr(_buffer, "+QIURC: \"pdpdeact\",1"))
                 {
                     QT_DEBUG("PDP deactivated");
                 }
-                if (strstr(_replyBuffer, "POWERED DOWN"))
+                if (strstr(_buffer, "POWERED DOWN"))
                 {
                     QT_DEBUG("Module powered down");
                     break;
@@ -1009,9 +1003,8 @@ bool QuectelCellular::sendAndWaitForReply(const char* command, uint16_t timeout,
 bool QuectelCellular::sendAndCheckReply(const char* command, const char* reply, uint16_t timeout)
 {
     sendAndWaitForReply(command, timeout);
-    return (strstr(_replyBuffer, reply) != nullptr);
+    return (strstr(_buffer, reply) != nullptr);
 }
-
 bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 {
     uint16_t index = 0;
@@ -1026,16 +1019,16 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
         while (_uart->available())
         {
             char c = _uart->read();
-
             if (c == '\r')
             {
                 continue;
             }
-            if (linesFound > 0)
-            {    			
-                _replyBuffer[index] = c;
-                index++;
+            if (c == '\n' && index == 0)
+            {
+                // Ignore first \n.
+                continue;
             }
+            _buffer[index++] = c;
             if (c == '\n')
             {
 				linesFound++;
@@ -1046,7 +1039,7 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 	    	}            
         }
 
-   		if (linesFound > lines)
+   		if (linesFound >=lines)
     	{
    			break;
     	}            
@@ -1058,10 +1051,9 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
         callWatchdog();
         delay(1);
     }
-    _replyBuffer[index] = 0;
-    QT_COM_TRACE_START("");
-    QT_COM_TRACE_PART("%i lines - ", linesFound);
-    QT_COM_TRACE_ASCII(_replyBuffer, index);
+    _buffer[index] = 0;
+    QT_COM_TRACE_START(" <- ");
+    QT_COM_TRACE_ASCII(_buffer, index);
     QT_COM_TRACE_END("");
     return true;
 }
@@ -1073,22 +1065,22 @@ bool QuectelCellular::checkResult()
     // false   Unknown result
     // false  CME Error
     //
-    char* token = strstr(_replyBuffer, _OK);
+    char* token = strstr(_buffer, _OK);
     if (token)
     {
-        //QT_TRACE("*OK - %s", _replyBuffer);
+        //QT_TRACE("*OK - %s", _buffer);
         _lastError = 0;
         return true;
     }
-    token = strstr(_replyBuffer, _CME_ERROR);
+    token = strstr(_buffer, _CME_ERROR);
     if (!token)
     {
-        //QT_TRACE("*NO CME ERROR: %s", _replyBuffer);
+        //QT_TRACE("*NO CME ERROR: %s", _buffer);
         _lastError = -1;
         return false;
     }
-    //QT_TRACE("*CME ERROR: %s", _replyBuffer);
-    token = strtok(_replyBuffer, _CME_ERROR);
+    //QT_TRACE("*CME ERROR: %s", _buffer);
+    token = strtok(_buffer, _CME_ERROR);
     _lastError = atoi(token);
     return false;
 }

@@ -57,6 +57,7 @@
 #define QT_COM_TRACE_PART(...)
 #define QT_COM_TRACE_END(...)
 #define QT_COM_TRACE_BUFFER(buffer, size)
+#define QT_COM_TRACE_ASCII(buffer, size)
 #endif
 
 enum class QuectelModule : uint8_t
@@ -157,7 +158,7 @@ private:
     int8_t _lastError = 0;
     Uart* _uart;
     Logger* _logger;
-    char _replyBuffer[255];
+    char _buffer[255];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];
     WATCHDOG_CALLBACK_SIGNATURE;
