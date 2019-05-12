@@ -54,9 +54,9 @@ bool QuectelCellular::begin(Uart* uart)
     while (timeout > 0) 
     {
         flush();
-        if (sendAndCheckReply(_AT, _OK, 1000))
+        if (sendAndCheckReply(_AT, "AT", 1000))
         {
-            QT_COM_TRACE("GOT OK");
+            QT_COM_TRACE("GOT AT");
             break;
         }
         callWatchdog();
@@ -948,7 +948,7 @@ bool QuectelCellular::setPower(bool state)
     else
     {
         QT_DEBUG("Powering down module");
-        if (!sendAndCheckReply("AT+QPOWD", _OK, 1000))
+        if (!sendAndCheckReply("AT+QPOWD", _OK, 10000))
         {
             return false;
         }
@@ -1033,7 +1033,7 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
             {
 				linesFound++;
             }
-    		if (linesFound > lines)
+    		if (linesFound >= lines)
 	    	{
     			break;
 	    	}            
