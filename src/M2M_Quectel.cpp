@@ -501,35 +501,17 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
     // TODO: Max 1460 bytes can be sent in one +QISEND session
     // Add a loop
     sprintf(_buffer, "AT+QISEND=1,%i", size);
-    QT_COM_TRACE_START(" -> ");
-    QT_COM_TRACE_PART(_buffer);
-    QT_COM_TRACE_END("");
-    _uart->println(_buffer);
-    uint32_t timeout = millis() + 5000;
-    bool success = false;
-    while (millis() < timeout)
-    {
-        if (_uart->available())
-        {
-            char c = _uart->read();
-            if (c == '>')
-            {
-                success = true;
-                break;
-            }
-        }
-    }
-    if (!success)
+    if (!sendAndCheckReply(_buffer, "> ", 5000))
     {
         QT_ERROR("+QISEND handshake error");
         return 0;
-    }
-   	QT_COM_TRACE_START(" <- ");
+    }    
+   	QT_COM_TRACE_START(" -> ");
     QT_COM_TRACE_BUFFER(buf, size);
     QT_COM_TRACE_END("");
     _uart->write(buf, size);
     if (readReply(5000, 1) &&
-        strstr(_buffer, "SEND OK"))
+        strstr(_buffer, "Send OK"))
     {
         return size;
     }    
@@ -1067,6 +1049,9 @@ bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 
         if (timeout <= 0)
         {
+            QT_COM_TRACE_START(" <- (Timeout) ");
+            QT_COM_TRACE_ASCII(_buffer, index);
+            QT_COM_TRACE_END("");
             return false;
         }
         callWatchdog();
