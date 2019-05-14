@@ -39,37 +39,6 @@ bool QuectelCellular::begin(Uart* uart)
     QT_DEBUG("Powering on module");
     setPower(true);
 
-    QT_TRACE_START("Waiting for module");
-    while (!getStatus())
-    {
-        QT_TRACE_PART(".");
-        callWatchdog();
-        delay(500);
-    }
-    QT_TRACE_END("");      
-
-
-	QT_DEBUG("Open communications");
-    int32_t timeout = 7000;
-    while (timeout > 0) 
-    {
-        flush();
-        if (sendAndCheckReply(_AT, "AT", 1000))
-        {
-            QT_COM_TRACE("GOT AT");
-            break;
-        }
-        callWatchdog();
-        delay(500);
-        timeout -= 500;
-    }
-
-    if (timeout < 0)
-    {
-		QT_ERROR("Failed to initialize cellular module");
-        return false;
-    }
-
     // Disable echo
     sendAndCheckReply("ATE0", _OK, 1000);
     // Set verbose error messages
@@ -83,7 +52,7 @@ bool QuectelCellular::begin(Uart* uart)
     }
 
     QT_DEBUG("Waiting for module initialization");
-    timeout = 5000;
+    uint32_t timeout = 5000;
     while (timeout > 0)            
     {
         if (readReply(500, 1) &&
@@ -933,26 +902,77 @@ bool QuectelCellular::deleteFile(const char* fileName)
 
 bool QuectelCellular::setPower(bool state)
 {
+    uint32_t timeout;
 	QT_DEBUG("setPower: %i", state);
     if (state == true)
     {
-        if (_powerPin == NOT_A_PIN)
+        if (_powerPin != NOT_A_PIN)
         {
-            return true;
+            digitalWrite(_powerPin, LOW);
+            delay(300);
+            digitalWrite(_powerPin, HIGH);
         }
-        digitalWrite(_powerPin, LOW);
-        delay(300);
-        digitalWrite(_powerPin, HIGH);
-        return true;
+
+        QT_TRACE_START("Waiting for module");
+        while (!getStatus())
+        {
+            QT_TRACE_PART(".");
+            callWatchdog();
+            delay(500);
+        }
+        QT_TRACE_END("");
+
+        QT_DEBUG("Open communications");
+        int32_t timeout = 7000;
+        while (timeout > 0) 
+        {
+            flush();
+            if (sendAndCheckReply(_AT, "AT", 1000))
+            {
+                QT_COM_TRACE("GOT AT");
+                break;
+            }
+            callWatchdog();
+            delay(500);
+            timeout -= 500;
+        }
+
+        if (timeout < 0)
+        {
+            QT_ERROR("Failed to initialize cellular module");
+            return false;
+        }
     }
     else
     {
-        QT_DEBUG("Powering down module");
-        if (!sendAndCheckReply("AT+QPOWD", _OK, 10000))
+        if (!getStatus())
+        {
+            QT_COM_TRACE("Module already off");
+            return true;
+        }
+        QT_DEBUG("Powering down module");        
+        // First check if already awake
+        timeout = 5000;
+        while (timeout > 0) 
+        {
+            flush();
+            if (sendAndCheckReply(_AT, "OK", 1000))
+            {   
+                QT_COM_TRACE("GOT AT");
+                break;
+            }
+            callWatchdog();
+            delay(500);
+            timeout -= 500;
+        }
+        sendAndCheckReply("ATE0", _OK, 1000);
+
+
+        if (!sendAndCheckReply("AT+QPOWD=1", _OK, 10000))
         {
             return false;
         }
-        uint32_t timeout = millis() + 60000;  // max 60 seconds for a shutdown
+        timeout = millis() + 60000;  // max 60 seconds for a shutdown
         while (timeout > millis())
         {
             if (readReply(1000, 1))
@@ -1005,6 +1025,7 @@ bool QuectelCellular::sendAndCheckReply(const char* command, const char* reply, 
     sendAndWaitForReply(command, timeout);
     return (strstr(_buffer, reply) != nullptr);
 }
+
 bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 {
     uint16_t index = 0;
