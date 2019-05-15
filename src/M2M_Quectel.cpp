@@ -501,7 +501,7 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
     // TODO: Max 1460 bytes can be sent in one +QISEND session
     // Add a loop
     sprintf(_buffer, "AT+QISEND=1,%i", size);
-    if (!sendAndCheckReply(_buffer, "> ", 5000))
+    if (!sendAndWaitFor(_buffer, "> ", 5000))
     {
         QT_ERROR("+QISEND handshake error");
         return 0;
@@ -553,6 +553,10 @@ int QuectelCellular::read()
 
 int QuectelCellular::read(uint8_t *buf, size_t size)
 {
+    if (size == 0)
+    {
+        return 0;
+    }
     sprintf(_buffer, "AT+QIRD=1,%i", size);
     if (sendAndWaitForReply(_buffer, 1000, 1) &&
         strstr(_buffer, "+QIRD:"))
@@ -566,11 +570,11 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         char* ptr;
         uint16_t length = strtol(token, &ptr, 10);
         QT_COM_TRACE("Data len: %i", length);
-        _uart->readBytes(_buffer, length);
-        memcpy(buf, _buffer, length);
+        _uart->readBytes(_buffer, size);
+        memcpy(buf, _buffer, size);
         buf[length] = '\0';
         QT_COM_TRACE_START("");
-        QT_COM_TRACE_ASCII(_buffer, length);
+        QT_COM_TRACE_ASCII(_buffer, size);
         QT_COM_TRACE_END("");
         return length;       
     }
@@ -1000,6 +1004,56 @@ bool QuectelCellular::sendAndWaitForReply(const char* command, uint16_t timeout,
 	QT_COM_TRACE(" -> %s", command);
     _uart->println(command);
     return readReply(timeout, lines);
+}
+
+bool QuectelCellular::sendAndWaitFor(const char* command, const char* reply, uint16_t timeout)
+{
+    uint16_t index = 0;
+
+    flush();
+	QT_COM_TRACE(" -> %s", command);
+    _uart->println(command);
+    while (timeout--)
+    {
+        if (index > 254)
+        {
+            break;
+        }
+        while (_uart->available())
+        {
+            char c = _uart->read();
+            if (c == '\r')
+            {
+                continue;
+            }
+            if (c == '\n' && index == 0)
+            {
+                // Ignore first \n.
+                continue;
+            }
+            _buffer[index++] = c;
+        }
+
+        if (strstr(_buffer, reply))
+        {
+            QT_COM_TRACE("Match found");
+            break;
+        }
+        if (timeout <= 0)
+        {
+            QT_COM_TRACE_START(" <- (Timeout) ");
+            QT_COM_TRACE_ASCII(_buffer, index);
+            QT_COM_TRACE_END("");
+            return false;
+        }
+        callWatchdog();
+        delay(1);
+    }
+    _buffer[index] = 0;
+    QT_COM_TRACE_START(" <- ");
+    QT_COM_TRACE_ASCII(_buffer, index);
+    QT_COM_TRACE_END("");
+    return true;
 }
 
 bool QuectelCellular::sendAndCheckReply(const char* command, const char* reply, uint16_t timeout)

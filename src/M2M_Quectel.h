@@ -148,6 +148,7 @@ public:
 private:
 	bool sendAndWaitForReply(const char* command, uint16_t timeout = 1000, uint8_t lines = 1);
 	bool sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout = 1000);
+    bool sendAndWaitFor(const char* command, const char* reply, uint16_t timeout);   
 	bool sendAndCheckReply(const char* command, const char* reply, uint16_t timeout = 1000);
     bool readReply(uint16_t timeout = 1000, uint8_t lines = 1);
     bool checkResult();
