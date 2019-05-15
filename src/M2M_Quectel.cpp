@@ -511,7 +511,7 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
     QT_COM_TRACE_END("");
     _uart->write(buf, size);
     if (readReply(5000, 1) &&
-        strstr(_buffer, "Send OK"))
+        strstr(_buffer, "SEND OK"))
     {
         return size;
     }    
