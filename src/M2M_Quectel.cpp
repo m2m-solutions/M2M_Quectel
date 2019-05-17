@@ -503,7 +503,7 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
     sprintf(_buffer, "AT+QISEND=1,%i", size);
     if (!sendAndWaitFor(_buffer, "> ", 5000))
     {
-        QT_ERROR("+QISEND handshake error");
+        QT_ERROR("+QISEND handshake error, %s", _buffer);
         return 0;
     }    
    	QT_COM_TRACE_START(" -> ");
