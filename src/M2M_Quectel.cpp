@@ -544,35 +544,47 @@ int QuectelCellular::available()
 {
     if (useEncryption())
     {
-        if (readReply(100, 1))
+        sslData = false;
+        sprintf(_buffer, "AT+QSSLRECV=1,1");
+        if (sendAndWaitForReply(_buffer, 1000, 4))
         {
-            if (strstr(_buffer, "+QSSLURC:"))
+            char* token = strtok(_buffer, "+QSSLRECV: ");
+            if (token)
             {
-                return true;
+                uint32_t result = atoi(token);
+                if (result != 0)
+                {
+                    sslData = true;
+                    sslChar = _buffer[13];
+                    return true;
+                }                
             }
         }
         return false;
     }
-    sprintf(_buffer, "AT+QIRD=1,0");
-    if (sendAndWaitForReply(_buffer, 1000, 3))
+    else
     {
-        const char delimiter[] = ",";
-        char * token = strtok(_buffer, delimiter);                
-        if (token)
+        sprintf(_buffer, "AT+QIRD=1,0");
+        if (sendAndWaitForReply(_buffer, 1000, 3))
         {
-            token = strtok(nullptr, delimiter);
+            const char delimiter[] = ",";
+            char * token = strtok(_buffer, delimiter);                
             if (token)
             {
                 token = strtok(nullptr, delimiter);
                 if (token)
                 {
-                    char* ptr;
-                    uint16_t unread = strtol(token, &ptr, 10);
-                    QT_COM_TRACE("Available: %i", unread);
-                    return unread;
+                    token = strtok(nullptr, delimiter);
+                    if (token)
+                    {
+                        char* ptr;
+                        uint16_t unread = strtol(token, &ptr, 10);
+                        QT_COM_TRACE("Available: %i", unread);
+                        return unread;
+                    }
                 }
-            }
-        }        
+            }        
+        }
     }
     return 0;
 }
@@ -590,8 +602,13 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
     {
         return 0;
     }
+    if (sslData && size == 1)
+    {
+        buf[0] = sslChar;
+        return 1;
+    }
     sprintf(_command, "+Q%s", useEncryption() ? "SSLRECV" : "IRD");
-    sprintf(_buffer, "AT%s=1,%i", _command, useEncryption() ? 128: size);
+    sprintf(_buffer, "AT%s=1,%i", _command, sslData ? size - 1 : size);
     if (sendAndWaitForReply(_buffer, 1000, 1) &&
         strstr(_buffer, _command))
     {        
@@ -604,8 +621,15 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         char* ptr;
         uint16_t length = strtol(token, &ptr, 10);
         QT_COM_TRACE("Data len: %i", length);
-        _uart->readBytes(_buffer, size);
-        memcpy(buf, _buffer, size);
+
+        uint8_t offset = sslData ? 1 : 0;
+        if (sslData)
+        {
+            _buffer[0] = sslChar;
+        }
+
+        _uart->readBytes(_buffer + offset, length);
+        memcpy(buf, _buffer, length);
         buf[length] = '\0';
         QT_COM_TRACE_START("");
         QT_COM_TRACE_ASCII(_buffer, size);

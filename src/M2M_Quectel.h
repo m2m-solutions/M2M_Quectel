@@ -171,6 +171,8 @@ private:
     int8_t _powerPin;
     int8_t _statusPin;
     int8_t _lastError = 0;
+    bool sslData;
+    uint8_t sslChar;
     Uart* _uart;
     Logger* _logger;
     char _buffer[255];
