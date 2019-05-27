@@ -544,23 +544,26 @@ int QuectelCellular::available()
 {
     if (useEncryption())
     {
-        sslData = false;
-        sprintf(_buffer, "AT+QSSLRECV=1,1");
+        if (sslLength > 0)
+        {
+            return sslLength;
+        }
+        sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer));
         if (sendAndWaitForReply(_buffer, 1000, 4))
         {
             char* token = strtok(_buffer, "+QSSLRECV: ");
             if (token)
             {
-                uint32_t result = atoi(token);
-                if (result != 0)
+                sslLength = atoi(token);                
+                QT_COM_TRACE("Available: %i", sslLength);
+                if (sslLength > 0)
                 {
-                    sslData = true;
-                    sslChar = _buffer[13];
-                    return true;
-                }                
+                    token = strtok(_buffer, "\x0a");
+                    memcpy(_buffer, token, sslLength);
+                }            
+                return sslLength;
             }
         }
-        return false;
     }
     else
     {
@@ -568,7 +571,7 @@ int QuectelCellular::available()
         if (sendAndWaitForReply(_buffer, 1000, 3))
         {
             const char delimiter[] = ",";
-            char * token = strtok(_buffer, delimiter);                
+            char * token = strtok(_buffer, delimiter);              
             if (token)
             {
                 token = strtok(nullptr, delimiter);
@@ -586,6 +589,7 @@ int QuectelCellular::available()
             }        
         }
     }
+    QT_COM_ERROR("Failed to read response");
     return 0;
 }
 
@@ -602,39 +606,48 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
     {
         return 0;
     }
-    if (sslData && size == 1)
+    if (useEncryption())
     {
-        buf[0] = sslChar;
-        return 1;
-    }
-    sprintf(_command, "+Q%s", useEncryption() ? "SSLRECV" : "IRD");
-    sprintf(_buffer, "AT%s=1,%i", _command, sslData ? size - 1 : size);
-    if (sendAndWaitForReply(_buffer, 1000, 1) &&
-        strstr(_buffer, _command))
-    {        
-        // +QIRD: <len>
-        // <data>
-        //
-        // OK
-        char* token = strtok(_buffer, " ");
-        token = strtok(nullptr, "\n");
-        char* ptr;
-        uint16_t length = strtol(token, &ptr, 10);
+        uint32_t length = size > sslLength ? sslLength : size;
         QT_COM_TRACE("Data len: %i", length);
-
-        uint8_t offset = sslData ? 1 : 0;
-        if (sslData)
-        {
-            _buffer[0] = sslChar;
-        }
-
-        _uart->readBytes(_buffer + offset, length);
         memcpy(buf, _buffer, length);
         buf[length] = '\0';
-        QT_COM_TRACE_START("");
-        QT_COM_TRACE_ASCII(_buffer, size);
+        QT_COM_TRACE_START(" <- ");
+        QT_COM_TRACE_ASCII(buf, length);
         QT_COM_TRACE_END("");
-        return length;       
+        sslLength -= length;
+        QT_COM_TRACE("Remaining len: %i", sslLength);
+        if (sslLength > 0)
+        {
+            QT_COM_TRACE("Move %i, %i", length, sslLength);
+            memcpy(_buffer, _buffer + length, sslLength);            
+        }
+        return length;
+    }
+    else
+    {
+        sprintf(_buffer, "ATQIRD=1,%i", size);
+        if (sendAndWaitForReply(_buffer, 1000, 1) &&
+            strstr(_buffer, _command))
+        {        
+            // +QIRD: <len>
+            // <data>
+            //
+            // OK
+            char* token = strtok(_buffer, " ");
+            token = strtok(nullptr, "\n");
+            char* ptr;
+            uint16_t length = strtol(token, &ptr, 10);
+            QT_COM_TRACE("Data len: %i", length);
+
+            _uart->readBytes(_buffer, length);
+            memcpy(buf, _buffer, length);
+            buf[length] = '\0';
+            QT_COM_TRACE_START(" <- ");
+            QT_COM_TRACE_ASCII(_buffer, size);
+            QT_COM_TRACE_END("");
+            return length;       
+        }
     }
     return 0;
 }
