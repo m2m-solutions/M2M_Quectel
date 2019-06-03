@@ -452,12 +452,7 @@ int QuectelCellular::connect(IPAddress ip, uint16_t port)
 int QuectelCellular::connect(IPAddress ip, uint16_t port, TlsEncryption encryption)
 {
     _encryption = encryption;
-<<<<<<< HEAD
     return connect(ip, port);
-=======
-    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
-    return connect(_buffer, port);
->>>>>>> d58566a408a99fa168d2158631f2142b94ca8c9c
 }
 
 int QuectelCellular::connect(const char *host, uint16_t port, TlsEncryption encryption) {
