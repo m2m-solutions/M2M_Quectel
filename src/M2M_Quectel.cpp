@@ -167,6 +167,11 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
     return 0;
 }
 
+bool QuectelCellular::setEncryption(TlsEncryption enc) 
+{
+    _encryption = enc;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Logging
@@ -440,24 +445,23 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
 //
 int QuectelCellular::connect(IPAddress ip, uint16_t port)
 {
-    return connect(ip, port, TlsEncryption::None);
+    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
+    return connect(_buffer, port);
 }
 
 int QuectelCellular::connect(IPAddress ip, uint16_t port, TlsEncryption encryption)
 {
     _encryption = encryption;
-    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
-    return connect(_buffer, port, encryption);
+    return connect(ip, port);
+}
+
+int QuectelCellular::connect(const char *host, uint16_t port, TlsEncryption encryption) {
+    _encryption = encryption;
+    return connect(host, port);
 }
 
 int QuectelCellular::connect(const char *host, uint16_t port)
 {
-    return connect(host, port, TlsEncryption::None);
-}
-
-int QuectelCellular::connect(const char *host, uint16_t port, TlsEncryption encryption)
-{
-    _encryption = encryption;
     if (useEncryption())
     {
         if (!activateSsl())
@@ -470,17 +474,18 @@ int QuectelCellular::connect(const char *host, uint16_t port, TlsEncryption encr
     sprintf(_command, "+Q%sOPEN", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
     if (useEncryption())
     {
-        sprintf(_buffer, "AT%s=1,1,1,\"%s\",%i,0,0", _command, host, port);    
+        sprintf(_buffer, "AT%s=1,1,1,\"%s\",%i,0", _command, host, port);    
     }
     else
     {
-        sprintf(_buffer, "AT%s=1,1,\"TCP\",\"%s\",%i,0", _command, host, port);
+        sprintf(_buffer, "AT%s=1,1,\"TCP\",\"%s\",%i,0,0", _command, host, port);
     }
     if (!sendAndCheckReply(_buffer, _OK))
     {
         QT_ERROR("Connection failed");
         return false;
     }
+    
     // Now we are waiting for connect
     // +QIOPEN: 1,0
     uint32_t expireTime = millis() + 30 * 1000;
@@ -549,16 +554,16 @@ int QuectelCellular::available()
             return sslLength;
         }
         sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer));
-        if (sendAndWaitForReply(_buffer, 1000, 4))
+        if (sendAndWaitForReply(_buffer, 1000, 3))
         {
             char* token = strtok(_buffer, "+QSSLRECV: ");
             if (token)
             {
-                sslLength = atoi(token);                
-                QT_COM_TRACE("Available: %i", sslLength);
+                sslLength = atoi(token);               
                 if (sslLength > 0)
                 {
-                    token = strtok(_buffer, "\x0a");
+                    token = strstr(_buffer, "\n");
+                    token++; //put the pointer in front of the linebreak
                     memcpy(_buffer, token, sslLength);
                 }            
                 return sslLength;
@@ -626,9 +631,9 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
     }
     else
     {
-        sprintf(_buffer, "ATQIRD=1,%i", size);
+        sprintf(_buffer, "AT+QIRD=1,%i", size);
         if (sendAndWaitForReply(_buffer, 1000, 1) &&
-            strstr(_buffer, _command))
+            strstr(_buffer, "+QIRD:"))
         {        
             // +QIRD: <len>
             // <data>
@@ -697,12 +702,16 @@ uint8_t QuectelCellular::connected()
     //
     // OK
     //
-    sprintf(_command, "+Q%sSTATE", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+    //NOTE ON SSL:
+    //UG96 has a bug where it returns instead of qsslstate on qsslstate requests
+    //to mitigate this we have changed occurances of _command to QISTATE
+
+    sprintf(_command, "Q%sSTATE", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
     sprintf(_buffer, "AT+%s=1,1", _command);
     if (sendAndWaitForReply(_buffer, 1000, 3) &&
-        strstr(_buffer, _command))
+        strstr(_buffer, "QISTATE")) 
     {
-        char* tokenStart = strstr(_buffer, _buffer);
+        char* tokenStart = strstr(_buffer, "QISTATE");
         tokenStart = &_buffer[tokenStart - _buffer];
         
         char* token = strtok(tokenStart, ",");
@@ -711,7 +720,9 @@ uint8_t QuectelCellular::connected()
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
-        
+
+        QT_COM_TRACE("Socket State: %s, Connected: %s", token, strcmp(token, "3") == 0 ? "true" : "false");
+
         return strcmp(token, "3") == 0;        
     }
     return false;

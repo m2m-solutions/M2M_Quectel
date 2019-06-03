@@ -104,6 +104,9 @@ public:
 	bool setPower(bool state);
     bool getStatus();    
 
+    //SSL
+    bool setEncryption(TlsEncryption enc);
+
     int8_t getLastError();
 
     bool getSimPresent();
@@ -124,8 +127,8 @@ public:
     // TCP Client interface
     int connect(IPAddress ip, uint16_t port);
     int connect(const char *host, uint16_t port);
-    int connect(IPAddress ip, uint16_t port, TlsEncryption encryption = TlsEncryption::None);
-    int connect(const char *host, uint16_t port, TlsEncryption encryption = TlsEncryption::None);
+    int connect(IPAddress ip, uint16_t port, TlsEncryption encryption);
+    int connect(const char *host, uint16_t port, TlsEncryption encryption);
     size_t write(uint8_t);
     size_t write(const uint8_t *buf, size_t size);
     int available();
