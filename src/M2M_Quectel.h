@@ -178,6 +178,7 @@ private:
     Uart* _uart;
     Logger* _logger;
     char _buffer[255];
+    char _readBuffer[255];
     char _command[32];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];

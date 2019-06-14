@@ -556,7 +556,10 @@ int QuectelCellular::available()
         sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer));
         if (sendAndWaitForReply(_buffer, 1000, 3))
         {
-            char* token = strtok(_buffer, "+QSSLRECV: ");
+            char* tokenStart = strstr(_buffer, "QSSLRECV");
+            tokenStart = &_buffer[tokenStart - _buffer];
+            char* token = strtok(tokenStart, "+QSSLRECV: ");
+
             if (token)
             {
                 sslLength = atoi(token);               
@@ -564,8 +567,9 @@ int QuectelCellular::available()
                 {
                     token = strstr(_buffer, "\n");
                     token++; //put the pointer in front of the linebreak
-                    memcpy(_buffer, token, sslLength);
-                }            
+                    memcpy(_readBuffer, token, sslLength);
+                }
+				QT_TRACE("available sslLength: %i", sslLength);
                 return sslLength;
             }
         }
@@ -615,7 +619,7 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
     {
         uint32_t length = size > sslLength ? sslLength : size;
         QT_COM_TRACE("Data len: %i", length);
-        memcpy(buf, _buffer, length);
+        memcpy(buf, _readBuffer, length);
         buf[length] = '\0';
         QT_COM_TRACE_START(" <- ");
         QT_COM_TRACE_ASCII(buf, length);
@@ -625,7 +629,7 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
         if (sslLength > 0)
         {
             QT_COM_TRACE("Move %i, %i", length, sslLength);
-            memcpy(_buffer, _buffer + length, sslLength);            
+            memcpy(_readBuffer, _readBuffer + length, sslLength);            
         }
         return length;
     }
