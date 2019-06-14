@@ -50,9 +50,6 @@ void setup()
 
 	serial.println("Connecting to network");
 	quectel.connectNetwork(APN,"","");
-
-	serial.println("GET www.google.se");
-	quectel.httpGet("http://www.google.se");
 }
 
 void loop()
