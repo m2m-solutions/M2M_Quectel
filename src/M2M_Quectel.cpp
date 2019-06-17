@@ -734,6 +734,10 @@ uint8_t QuectelCellular::connected()
 
 bool QuectelCellular::activateSsl()
 {
+	if(!useEncryption()) {
+		_encryption = TlsEncryption::Tls12; //Set to Tls12 if no other encryption is specified
+	}
+	
     sprintf(_command, "AT+QSSLCFG=\"sslversion\",1,%i", (uint8_t)_encryption);
     if (!sendAndCheckReply(_command, _OK, 10000))    // Set TLS
     {
