@@ -77,6 +77,16 @@ enum class NetworkRegistrationState : uint8_t
     Roaming
 };
 
+enum class TlsEncryption : uint8_t
+{
+    None = 0,
+    Ssl30,
+    Tls10,
+    Tls11,
+    Tls12,
+    All
+};
+
 #define FILE_HANDLE         uint32_t
 #define NOT_A_FILE_HANDLE   -1
 
@@ -93,6 +103,9 @@ public:
 
 	bool setPower(bool state);
     bool getStatus();    
+
+    //SSL
+    bool setEncryption(TlsEncryption enc);
 
     int8_t getLastError();
 
@@ -114,6 +127,8 @@ public:
     // TCP Client interface
     int connect(IPAddress ip, uint16_t port);
     int connect(const char *host, uint16_t port);
+    int connect(IPAddress ip, uint16_t port, TlsEncryption encryption);
+    int connect(const char *host, uint16_t port, TlsEncryption encryption);
     size_t write(uint8_t);
     size_t write(const uint8_t *buf, size_t size);
     int available();
@@ -146,6 +161,8 @@ public:
     void setWatchdogCallback(WATCHDOG_CALLBACK_SIGNATURE);
 
 private:
+    bool activateSsl();
+    bool useEncryption();
 	bool sendAndWaitForReply(const char* command, uint16_t timeout = 1000, uint8_t lines = 1);
 	bool sendAndWaitForMultilineReply(const char* command, uint8_t lines, uint16_t timeout = 1000);
     bool sendAndWaitFor(const char* command, const char* reply, uint16_t timeout);   
@@ -157,12 +174,16 @@ private:
     int8_t _powerPin;
     int8_t _statusPin;
     int8_t _lastError = 0;
+    uint32_t sslLength;
     Uart* _uart;
     Logger* _logger;
     char _buffer[255];
+    char _readBuffer[255];
+    char _command[32];
 	QuectelModule _moduleType;
 	char _firmwareVersion[20];
     WATCHDOG_CALLBACK_SIGNATURE;
+    TlsEncryption _encryption;
 
     boolean httpsredirect;
     const char* _useragent = "PP";
@@ -171,6 +192,8 @@ private:
     const char* _ERROR = "ERROR";
     const char* _CONNECT = "CONNECT";
     const char* _CME_ERROR = "CME ERROR: ";
+    const char* _INET_PREFIX = "I";
+    const char* _SSL_PREFIX = "SSL";
 };
 
 #endif

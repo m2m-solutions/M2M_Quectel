@@ -167,6 +167,11 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
     return 0;
 }
 
+bool QuectelCellular::setEncryption(TlsEncryption enc) 
+{
+    _encryption = enc;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Logging
@@ -368,19 +373,8 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
             QT_ERROR("Failed to activate SSL context ID");
             return false;
         }
-        if (!sendAndCheckReply("AT+QSSLCFG=\"sslversion\",1,3", _OK, 10000))    // Set TLS 1.2
+        if (!activateSsl())
         {
-            QT_ERROR("Failed to set TLS version");
-            return false;
-        }
-        if (!sendAndCheckReply("AT+QSSLCFG=\"ciphersuite\",1,\"0xFFFF\"", _OK, 10000))  // Allow all
-        {
-            QT_ERROR("Failed to set cipher suites");
-            return false;
-        }
-        if (!sendAndCheckReply("AT+QSSLCFG=\"seclevel\",1,0", _OK, 10000))
-        {
-            QT_ERROR("Failed to set security level");
             return false;
         }
     }
@@ -451,19 +445,54 @@ bool QuectelCellular::httpGet(const char* url, const char* fileName)
 //
 int QuectelCellular::connect(IPAddress ip, uint16_t port)
 {
-    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);    
+    sprintf(_buffer, "%i.%i.%i.%i", ip[0], ip[1], ip[2], ip[3]);
     return connect(_buffer, port);
+}
+
+int QuectelCellular::connect(IPAddress ip, uint16_t port, TlsEncryption encryption)
+{
+    _encryption = encryption;
+    return connect(ip, port);
+}
+
+int QuectelCellular::connect(const char *host, uint16_t port, TlsEncryption encryption) {
+    _encryption = encryption;
+    return connect(host, port);
 }
 
 int QuectelCellular::connect(const char *host, uint16_t port)
 {
+    if (useEncryption())
+    {
+        if (!activateSsl())
+        {
+            return false;
+        }
+    }
+	
+	sprintf(_buffer, "AT+QCFG=\"urc/port\",0,\"uart1\"");
+    if (!sendAndCheckReply(_buffer, _OK))
+    {
+        QT_ERROR("Could not remove urc messages");
+        return false;
+    }
+
     // AT+QIOPEN=1,1,"TCP","220.180.239.201",8713,0,0
-    sprintf(_buffer, "AT+QIOPEN=1,1,\"TCP\",\"%s\",%i,0,0", host, port);
+    sprintf(_command, "+Q%sOPEN", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+    if (useEncryption())
+    {
+        sprintf(_buffer, "AT%s=1,1,1,\"%s\",%i,0", _command, host, port);    
+    }
+    else
+    {
+        sprintf(_buffer, "AT%s=1,1,\"TCP\",\"%s\",%i,0,0", _command, host, port);
+    }
     if (!sendAndCheckReply(_buffer, _OK))
     {
         QT_ERROR("Connection failed");
         return false;
     }
+    
     // Now we are waiting for connect
     // +QIOPEN: 1,0
     uint32_t expireTime = millis() + 30 * 1000;
@@ -471,11 +500,14 @@ int QuectelCellular::connect(const char *host, uint16_t port)
     {
         callWatchdog();
         if (readReply(500, 1) &&
-            strstr(_buffer, "+QIOPEN"))
+            strstr(_buffer, _command))
         {
-            if (_buffer[9] != '1')
+            char* token = strtok(_buffer, " ");
+            token = strtok(nullptr, ",");
+
+            if (*token != '1')
             {
-                QT_ERROR("Connection failed");
+                QT_ERROR("Connection failed, %i, '%c'", strlen(_buffer), token);
                 return false;
             }
             QT_DEBUG("Connection open");
@@ -500,10 +532,11 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
 {
     // TODO: Max 1460 bytes can be sent in one +QISEND session
     // Add a loop
-    sprintf(_buffer, "AT+QISEND=1,%i", size);
+    sprintf(_command, "+Q%sSEND", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+    sprintf(_buffer, "AT%s=1,%i", _command, size);
     if (!sendAndWaitFor(_buffer, "> ", 5000))
     {
-        QT_ERROR("+QISEND handshake error, %s", _buffer);
+        QT_ERROR("%s handshake error, %s", _command, _buffer);
         return 0;
     }    
    	QT_COM_TRACE_START(" -> ");
@@ -521,26 +554,60 @@ size_t QuectelCellular::write(const uint8_t *buf, size_t size)
 
 int QuectelCellular::available()
 {
-    if (sendAndWaitForReply("AT+QIRD=1,0", 1000, 3))
+    if (useEncryption())
     {
-        const char delimiter[] = ",";
-        char * token = strtok(_buffer, delimiter);                
-        if (token)
+        if (sslLength > 0)
         {
-            token = strtok(nullptr, delimiter);
+            return sslLength;
+        }
+        sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer) - 36);
+        if (sendAndWaitForReply(_buffer, 1000, 3))
+        {
+            char* recvToken = strstr(_buffer, "+QSSLRECV: ");
+			recvToken += 11;
+			
+            char* lfToken = strstr(recvToken, "\n");
+			uint32_t llen = lfToken - recvToken;
+			
+			char numberStr[llen];
+			strncpy(numberStr, recvToken, llen);
+			numberStr[llen] = '\0';
+			
+			sslLength = atoi(numberStr);               
+			if (sslLength > 0)
+			{
+				lfToken++; //put the pointer in front of the linebreak
+				memcpy(_readBuffer, lfToken, sslLength);
+			}
+			QT_TRACE("available sslLength: %i", sslLength);
+			return sslLength;
+        }
+    }
+    else
+    {
+        sprintf(_buffer, "AT+QIRD=1,0");
+        if (sendAndWaitForReply(_buffer, 1000, 3))
+        {
+            const char delimiter[] = ",";
+            char * token = strtok(_buffer, delimiter);              
             if (token)
             {
                 token = strtok(nullptr, delimiter);
                 if (token)
                 {
-                    char* ptr;
-                    uint16_t unread = strtol(token, &ptr, 10);
-                    QT_COM_TRACE("Available: %i", unread);
-                    return unread;
+                    token = strtok(nullptr, delimiter);
+                    if (token)
+                    {
+                        char* ptr;
+                        uint16_t unread = strtol(token, &ptr, 10);
+                        QT_COM_TRACE("Available: %i", unread);
+                        return unread;
+                    }
                 }
-            }
-        }        
+            }        
+        }
     }
+    QT_COM_ERROR("Failed to read response");
     return 0;
 }
 
@@ -557,26 +624,47 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
     {
         return 0;
     }
-    sprintf(_buffer, "AT+QIRD=1,%i", size);
-    if (sendAndWaitForReply(_buffer, 1000, 1) &&
-        strstr(_buffer, "+QIRD:"))
-    {        
-        // +QIRD: <len>
-        // <data>
-        //
-        // OK
-        char* token = strtok(_buffer, " ");
-        token = strtok(nullptr, "\n");
-        char* ptr;
-        uint16_t length = strtol(token, &ptr, 10);
+    if (useEncryption())
+    {
+        uint32_t length = size > sslLength ? sslLength : size;
         QT_COM_TRACE("Data len: %i", length);
-        _uart->readBytes(_buffer, size);
-        memcpy(buf, _buffer, size);
+        memcpy(buf, _readBuffer, length);
         buf[length] = '\0';
-        QT_COM_TRACE_START("");
-        QT_COM_TRACE_ASCII(_buffer, size);
+        QT_COM_TRACE_START(" <- ");
+        QT_COM_TRACE_ASCII(buf, length);
         QT_COM_TRACE_END("");
-        return length;       
+        sslLength -= length;
+        QT_COM_TRACE("Remaining len: %i", sslLength);
+        if (sslLength > 0)
+        {
+            QT_COM_TRACE("Move %i, %i", length, sslLength);
+            memcpy(_readBuffer, _readBuffer + length, sslLength);            
+        }
+        return length;
+    }
+    else
+    {
+        sprintf(_buffer, "AT+QIRD=1,%i", size);
+        if (sendAndWaitForReply(_buffer, 1000, 1) &&
+            strstr(_buffer, "+QIRD:"))
+        {        
+            // +QIRD: <len>
+            // <data>
+            //
+            // OK
+            char* token = strtok(_buffer, " ");
+            token = strtok(nullptr, "\n");
+            char* ptr;
+            uint16_t length = strtol(token, &ptr, 10);
+            QT_COM_TRACE("Data len: %i", length);
+
+            _uart->readBytes(buf, length);
+            buf[length] = '\0';
+            QT_COM_TRACE_START(" <- ");
+            QT_COM_TRACE_ASCII(_buffer, size);
+            QT_COM_TRACE_END("");
+            return length;       
+        }
     }
     return 0;
 }
@@ -598,14 +686,17 @@ void QuectelCellular::flush()
 void QuectelCellular::stop()
 {
     // AT+QICLOSE=1,10
-    if (!sendAndCheckReply("AT+QICLOSE=1,10", _OK, 10000))
+    sprintf(_command, "+Q%sCLOSE", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+    sprintf(_buffer, "AT%s=1,10", _command);
+    if (!sendAndCheckReply(_buffer, _OK, 10000))
     {
         QT_ERROR("Failed to close connection");
     }
     uint32_t timeout = millis() + 20000;
     while (millis() < timeout)
     {
-        sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3);
+        sprintf(_command, "AT+Q%sSTATE=1,1", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+        sendAndWaitForReply(_command, 1000, 3);
         if (_buffer[0] == 'O' && _buffer[1] == 'K')
         {            
             QT_TRACE("Disconnected");
@@ -623,10 +714,16 @@ uint8_t QuectelCellular::connected()
     //
     // OK
     //
-    if (sendAndWaitForReply("AT+QISTATE=1,1", 1000, 3) &&
-        strstr(_buffer, "+QISTATE:"))
+    //NOTE ON SSL:
+    //UG96 has a bug where it returns instead of qsslstate on qsslstate requests
+    //to mitigate this we have changed occurances of _command to QISTATE
+
+    sprintf(_command, "Q%sSTATE", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
+    sprintf(_buffer, "AT+%s=1,1", _command);
+    if (sendAndWaitForReply(_buffer, 1000, 3) &&
+        strstr(_buffer, "QISTATE")) 
     {
-        char* tokenStart = strstr(_buffer, "+QISTATE:");
+        char* tokenStart = strstr(_buffer, "QISTATE");
         tokenStart = &_buffer[tokenStart - _buffer];
         
         char* token = strtok(tokenStart, ",");
@@ -635,10 +732,42 @@ uint8_t QuectelCellular::connected()
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
         token = strtok(nullptr, ",");
-        
+
+        QT_COM_TRACE("Socket State: %s, Connected: %s", token, strcmp(token, "3") == 0 ? "true" : "false");
+
         return strcmp(token, "3") == 0;        
     }
     return false;
+}
+
+bool QuectelCellular::activateSsl()
+{
+	if(!useEncryption()) {
+		_encryption = TlsEncryption::Tls12; //Set to Tls12 if no other encryption is specified
+	}
+	
+    sprintf(_command, "AT+QSSLCFG=\"sslversion\",1,%i", (uint8_t)_encryption);
+    if (!sendAndCheckReply(_command, _OK, 10000))    // Set TLS
+    {
+        QT_ERROR("Failed to set TLS version");
+        return false;
+    }
+    if (!sendAndCheckReply("AT+QSSLCFG=\"ciphersuite\",1,\"0xFFFF\"", _OK, 10000))  // Allow all
+    {
+        QT_ERROR("Failed to set cipher suites");
+        return false;
+    }
+    if (!sendAndCheckReply("AT+QSSLCFG=\"seclevel\",1,0", _OK, 10000))
+    {
+        QT_ERROR("Failed to set security level");
+        return false;
+    }
+    return true;
+}
+
+bool QuectelCellular::useEncryption()
+{
+    return _encryption != TlsEncryption::None;
 }
 
 ///////////////////////////////////////////////////////////
@@ -952,7 +1081,12 @@ bool QuectelCellular::setPower(bool state)
             timeout -= 500;
         }
         sendAndCheckReply("ATE0", _OK, 1000);
-
+		
+		if (!sendAndCheckReply("AT+QCFG=\"urc/port\",1,\"uart1\"", _OK))
+		{
+			QT_ERROR("Could not start urc messages");
+			return false;
+		}
 
         if (!sendAndCheckReply("AT+QPOWD=1", _OK, 10000))
         {
@@ -977,6 +1111,7 @@ bool QuectelCellular::setPower(bool state)
         }
         return false;
     }
+    return true;
 }
 
 bool QuectelCellular::getStatus()
@@ -1157,4 +1292,6 @@ void QuectelCellular::setWatchdogCallback(WATCHDOG_CALLBACK_SIGNATURE)
 {
     this->watchdogcallback = watchdogcallback;
 }
+
+
 
