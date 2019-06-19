@@ -469,6 +469,13 @@ int QuectelCellular::connect(const char *host, uint16_t port)
             return false;
         }
     }
+	
+	sprintf(_buffer, "AT+QCFG=\"urc/port\",0,\"uart1\"");
+    if (!sendAndCheckReply(_buffer, _OK))
+    {
+        QT_ERROR("Could not remove urc messages");
+        return false;
+    }
 
     // AT+QIOPEN=1,1,"TCP","220.180.239.201",8713,0,0
     sprintf(_command, "+Q%sOPEN", useEncryption() ? _SSL_PREFIX : _INET_PREFIX);
@@ -553,25 +560,27 @@ int QuectelCellular::available()
         {
             return sslLength;
         }
-        sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer));
+        sprintf(_buffer, "AT+QSSLRECV=1,%i", sizeof(_buffer) - 36);
         if (sendAndWaitForReply(_buffer, 1000, 3))
         {
-            char* tokenStart = strstr(_buffer, "QSSLRECV");
-            tokenStart = &_buffer[tokenStart - _buffer];
-            char* token = strtok(tokenStart, "+QSSLRECV: ");
-
-            if (token)
-            {
-                sslLength = atoi(token);               
-                if (sslLength > 0)
-                {
-                    token = strstr(_buffer, "\n");
-                    token++; //put the pointer in front of the linebreak
-                    memcpy(_readBuffer, token, sslLength);
-                }
-				QT_TRACE("available sslLength: %i", sslLength);
-                return sslLength;
-            }
+            char* recvToken = strstr(_buffer, "+QSSLRECV: ");
+			recvToken += 11;
+			
+            char* lfToken = strstr(recvToken, "\n");
+			uint32_t llen = lfToken - recvToken;
+			
+			char numberStr[llen];
+			strncpy(numberStr, recvToken, llen);
+			numberStr[llen] = '\0';
+			
+			sslLength = atoi(numberStr);               
+			if (sslLength > 0)
+			{
+				lfToken++; //put the pointer in front of the linebreak
+				memcpy(_readBuffer, lfToken, sslLength);
+			}
+			QT_TRACE("available sslLength: %i", sslLength);
+			return sslLength;
         }
     }
     else
@@ -649,8 +658,7 @@ int QuectelCellular::read(uint8_t *buf, size_t size)
             uint16_t length = strtol(token, &ptr, 10);
             QT_COM_TRACE("Data len: %i", length);
 
-            _uart->readBytes(_buffer, length);
-            memcpy(buf, _buffer, length);
+            _uart->readBytes(buf, length);
             buf[length] = '\0';
             QT_COM_TRACE_START(" <- ");
             QT_COM_TRACE_ASCII(_buffer, size);
@@ -1073,7 +1081,12 @@ bool QuectelCellular::setPower(bool state)
             timeout -= 500;
         }
         sendAndCheckReply("ATE0", _OK, 1000);
-
+		
+		if (!sendAndCheckReply("AT+QCFG=\"urc/port\",1,\"uart1\"", _OK))
+		{
+			QT_ERROR("Could not start urc messages");
+			return false;
+		}
 
         if (!sendAndCheckReply("AT+QPOWD=1", _OK, 10000))
         {
