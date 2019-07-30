@@ -566,6 +566,7 @@ int QuectelCellular::available()
             char* recvToken = strstr(_buffer, "+QSSLRECV: ");
 			recvToken += 11;
 			
+            /* Get length of data */
             char* lfToken = strstr(recvToken, "\n");
 			uint32_t llen = lfToken - recvToken;
 			
@@ -573,11 +574,36 @@ int QuectelCellular::available()
 			strncpy(numberStr, recvToken, llen);
 			numberStr[llen] = '\0';
 			
-			sslLength = atoi(numberStr);               
+			sslLength = atoi(numberStr);     
+
 			if (sslLength > 0)
 			{
-				lfToken++; //put the pointer in front of the linebreak
-				memcpy(_readBuffer, lfToken, sslLength);
+                //set start of data to after the last new line
+                char* data = lfToken + 1;
+
+                //The check below is because sometimes a URC-message gets through and ruins everything because it includes 2 more lines that we don't expect
+                //First cut off the message so we only check the first 30 characters
+                
+                //get first 30 characters
+                char subbuff[30];
+                memcpy( subbuff, _buffer, 30 );
+                subbuff[30] = '\0';
+
+                //A bad message can at a maximum look like this: +QSSLURC: "recv",1<LF><LF>+QSSLRECV: [number]<LF>
+                //but sometimes only part of it is included, example: v",1<LF><LF>+ QSSLRECV:[number]<LF>
+                //i check for 2 new lines before +QSSLRECV because if there only is 1 then the data will still be read
+                if(strstr(subbuff, "\n\n+QSSLRE") != nullptr) {
+                    if(readReply(1000, 2)) {
+                        data = _buffer;
+                    }
+                    else {
+                        QT_ERROR("Could not get data after URC-interrupt");
+
+                        sslLength = 0;
+                    }
+                }
+
+				memcpy(_readBuffer, data, sslLength);
 			}
 			QT_TRACE("available sslLength: %i", sslLength);
 			return sslLength;
