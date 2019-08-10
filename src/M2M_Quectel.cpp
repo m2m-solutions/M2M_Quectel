@@ -200,6 +200,21 @@ bool QuectelCellular::getSimPresent()
     return false;
 }
 
+const char* QuectelCellular::getModuleType()
+{
+    switch (_moduleType)
+    {
+        case QuectelModule::UG96:
+            return "UG96";
+        case QuectelModule::BG96:
+            return "BG96";
+        case QuectelModule::M95:
+            return "M95";
+        default:
+            return "Unknown";
+    }
+}
+
 uint8_t QuectelCellular::getOperatorName(char* buffer)
 {
     // Reply is:
@@ -1102,6 +1117,11 @@ bool QuectelCellular::setPower(bool state)
                 QT_COM_TRACE("GOT AT");
                 break;
             }
+            if (sendAndCheckReply(_AT, "OK", 1000))
+            {   
+                QT_COM_TRACE("GOT OK");
+                break;
+            }            
             callWatchdog();
             delay(500);
             timeout -= 500;
