@@ -110,7 +110,6 @@ public:
     int8_t getLastError();
 
     bool getSimPresent();
-    const char* ();
 	const char* getFirmwareVersion();
     uint8_t getIMEI(char* buffer);
     uint8_t getOperatorName(char* buffer);
