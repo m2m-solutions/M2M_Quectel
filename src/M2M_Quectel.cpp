@@ -284,6 +284,26 @@ uint8_t QuectelCellular::getSIMCCID(char* buffer)
     return 0;    
 }
 
+uint8_t QuectelCellular::getSIMIMSI(char* buffer)
+{
+    char delim[] = " \n";
+    // 240080007440698
+    //
+    // OK
+    if (sendAndWaitForReply("AT+CIMI", 1000, 3))
+    {
+        char * token = strtok(_buffer, delim);
+        if (token)
+        {
+            token = strtok(nullptr, delim);
+            uint8_t len = strlen(token);
+            strncpy(buffer, token, len + 1);
+            return len;                        
+        }
+    }
+    return 0;    
+}
+
 NetworkRegistrationState QuectelCellular::getNetworkRegistration()
 {
     if (sendAndWaitForReply("AT+CREG?", 1000, 3))   

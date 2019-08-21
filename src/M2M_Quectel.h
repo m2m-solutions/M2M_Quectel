@@ -116,6 +116,7 @@ public:
     NetworkRegistrationState getNetworkRegistration();
     uint8_t getRSSI();
     uint8_t getSIMCCID(char* buffer);
+    uint8_t getSIMIMSI(char* buffer);
     double getVoltage();
 
     bool connectNetwork(const char* apn, const char* userid, const char* password);
