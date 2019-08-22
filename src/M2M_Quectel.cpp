@@ -286,18 +286,17 @@ uint8_t QuectelCellular::getSIMCCID(char* buffer)
 
 uint8_t QuectelCellular::getSIMIMSI(char* buffer)
 {
-    char delim[] = " \n";
+    char delim[] = "\n";
     // 240080007440698
     //
     // OK
     if (sendAndWaitForReply("AT+CIMI", 1000, 3))
     {
-        char * token = strtok(_buffer, delim);
-        if (token)
+        char * lf = strstr(_buffer, delim);
+        if (lf)
         {
-            token = strtok(nullptr, delim);
-            uint8_t len = strlen(token);
-            strncpy(buffer, token, len + 1);
+            uint8_t len = lf - _buffer;
+            strncpy(buffer, _buffer, len);
             return len;                        
         }
     }
