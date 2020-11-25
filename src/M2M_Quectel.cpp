@@ -167,9 +167,9 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
     return 0;
 }
 
-bool QuectelCellular::setEncryption(TlsEncryption enc) 
+void QuectelCellular::setEncryption(TlsEncryption enc) 
 {
-    return (_encryption = enc) != TlsEncryption::None;
+    _encryption = enc;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////

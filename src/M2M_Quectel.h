@@ -105,7 +105,7 @@ public:
     bool getStatus();    
 
     //SSL
-    bool setEncryption(TlsEncryption enc);
+    void setEncryption(TlsEncryption enc);
 
     int8_t getLastError();
 
