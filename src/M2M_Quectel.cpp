@@ -169,7 +169,7 @@ uint8_t QuectelCellular::getIMEI(char* buffer)
 
 bool QuectelCellular::setEncryption(TlsEncryption enc) 
 {
-    _encryption = enc;
+    return (_encryption = enc) != TlsEncryption::None;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -619,7 +619,7 @@ int QuectelCellular::available()
                 //First cut off the message so we only check the first 30 characters
                 
                 //get first 30 characters
-                char subbuff[30];
+                char subbuff[31];
                 memcpy( subbuff, _buffer, 30 );
                 subbuff[30] = '\0';
 
