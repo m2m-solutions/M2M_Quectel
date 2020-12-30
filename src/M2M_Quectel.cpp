@@ -1264,58 +1264,58 @@ bool QuectelCellular::sendAndCheckReply(const char* command, const char* reply, 
 
 bool QuectelCellular::readReply(uint16_t timeout, uint8_t lines)
 {
-	uint16_t index = 0;
-	uint16_t linesFound = 0;
+    uint16_t index = 0;
+    uint16_t linesFound = 0;
 
-	while (timeout--)
+    while (timeout--)
+    {
+	if (index > 254)
 	{
-		if (index > 254)
-		{
-			break;
-		}
-		while (_uart->available())
-		{
-			char c = _uart->read();
-			if (c == '\r')
-			{
-				continue;
-			}
-			if (c == '\n' && index == 0)
-			{
-				// Ignore first \n.
-				continue;
-			}
-			_buffer[index++] = c;
-			if (c == '\n')
-			{
-				linesFound++;
-			}
-			if (linesFound >= lines)
-			{
-				break;
-			}
-		}
-
-   		if (linesFound >=lines)
-		{
-   			break;
-		}
-
-		if (timeout <= 0)
-		{
-			QT_COM_TRACE_START(" <- (Timeout) ");
-			QT_COM_TRACE_ASCII(_buffer, index);
-			QT_COM_TRACE_END("");
-			return false;
-		}
-		callWatchdog();
-		delay(1);
+	    break;
 	}
-	_buffer[index] = 0;
-	QT_COM_TRACE_START(" <- ");
-	QT_COM_TRACE_ASCII(_buffer, index);
-	QT_COM_TRACE_END("");
-	return true;
+	while (_uart->available())
+	{
+	    char c = _uart->read();
+	    if (c == '\r')
+	    {
+		continue;
+	    }
+	    if (c == '\n' && index == 0)
+	    {
+		// Ignore first \n.
+		continue;
+	    }
+	    _buffer[index++] = c;
+	    if (c == '\n')
+	    {
+		linesFound++;
+	    }
+	    if (linesFound >= lines)
+	    {
+		break;
+	    }
+	}
+
+	if (linesFound >=lines)
+	{
+	    break;
+	}
+
+	if (timeout <= 0)
+	{
+	    QT_COM_TRACE_START(" <- (Timeout) ");
+	    QT_COM_TRACE_ASCII(_buffer, index);
+	    QT_COM_TRACE_END("");
+	    return false;
+	}
+	callWatchdog();
+	delay(1);
+    }
+    _buffer[index] = 0;
+    QT_COM_TRACE_START(" <- ");
+    QT_COM_TRACE_ASCII(_buffer, index);
+    QT_COM_TRACE_END("");
+    return true;
 }
 
 bool QuectelCellular::checkResult()
