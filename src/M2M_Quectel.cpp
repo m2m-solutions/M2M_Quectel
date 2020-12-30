@@ -1112,7 +1112,7 @@ bool QuectelCellular::setPower(bool state)
             timeout -= 500;
         }
 
-        if (timeout < 0)
+        if (timeout <= 0)
         {
             QT_ERROR("Failed to initialize cellular module");
             return false;
