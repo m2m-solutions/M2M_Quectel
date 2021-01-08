@@ -88,7 +88,7 @@ enum class TlsEncryption : uint8_t
 };
 
 #define FILE_HANDLE         uint32_t
-#define NOT_A_FILE_HANDLE   -1
+#define NOT_A_FILE_HANDLE   0xffffffff
 
 #define WATCHDOG_CALLBACK_SIGNATURE void (*watchdogcallback)()
 
@@ -105,7 +105,7 @@ public:
     bool getStatus();    
 
     //SSL
-    bool setEncryption(TlsEncryption enc);
+    void setEncryption(TlsEncryption enc);
 
     int8_t getLastError();
 
