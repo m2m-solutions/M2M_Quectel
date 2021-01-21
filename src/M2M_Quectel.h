@@ -102,7 +102,7 @@ public:
 	void setLogger(Logger* logger);
 
 	bool setPower(bool state);
-    bool getStatus();    
+    bool getStatus();
 
     //SSL
     void setEncryption(TlsEncryption enc);
@@ -150,6 +150,7 @@ public:
     bool readFile(FILE_HANDLE fileHandle, uint8_t* buffer, uint32_t length);
     bool writeFile(FILE_HANDLE fileHandle, const uint8_t* buffer, uint32_t length);
     bool seekFile(FILE_HANDLE fileHandle, uint32_t length);
+    bool seekFileCur(FILE_HANDLE fileHandle, int32_t length);
     uint32_t getFilePosition(FILE_HANDLE fileHandle);
     bool truncateFile(FILE_HANDLE fileHandle);
     bool closeFile(FILE_HANDLE fileHandle);
