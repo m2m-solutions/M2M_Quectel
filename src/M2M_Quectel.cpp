@@ -863,7 +863,7 @@ bool QuectelCellular::readFile(FILE_HANDLE fileHandle, uint8_t* buffer, uint32_t
     //
     // OK
     sprintf(_buffer, "AT+QFREAD=%li,%lu", fileHandle, length);
-    if (!sendAndCheckReply(_buffer, _CONNECT, 300))
+    if (!sendAndCheckReply(_buffer, _CONNECT, 1000))
     {
         QT_ERROR("Timeout for read command");
         return false;
