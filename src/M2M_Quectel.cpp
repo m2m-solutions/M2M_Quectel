@@ -868,22 +868,102 @@ bool QuectelCellular::readFile(FILE_HANDLE fileHandle, uint8_t* buffer, uint32_t
         QT_ERROR("Timeout for read command");
         return false;
     }
-    for (uint32_t i=0; i < length; i++)
+    const char *err_reply = "\r\n+CME ERROR: 4nn\r\n"; // 4[0,1][0-9]
+    const char *ok_reply = "\r\nOK\r\n";
+    int err;
+    _uart->setTimeout(50);
+    uint32_t t = _uart->readBytes(buffer, length);
+
+    if (t < length)
     {
-        uint32_t timeout = 1000;
-        while (!_uart->available())
-        {
-            timeout--;
-            delay(1);
-        }
-        buffer[i] = _uart->read();
+	if (t >= 6 && memcmp(buffer+t-6, ok_reply, 6) == 0)
+	{
+	    // This can happen if length >= 1506 and we only get 1500B
+	    QT_DEBUG("Only got %dB. Recursing", t-6);
+	    seekFileCur(fileHandle, -(length - (t-6)));
+	    return readFile(fileHandle, buffer+t-6, length - (t-6));
+	}
+	if (t >= 19 && memcmp(buffer+t-19, err_reply, 15) == 0)
+	{
+	    // This should be what mostly happen if there is an error, with t = 19
+	    if (sscanf((const char*)buffer+t-19, "\r\n+CME ERROR: %d\r\n", &err) == 1)
+		QT_ERROR("CME ERROR: %d", err);
+	    QT_ERROR("Read failed after %d bytes", t-19);
+	    return false;
+	}
+	// This should never happen
+	QT_ERROR("Unknown error. %dB read",	t);
+
+	QT_COM_TRACE_START("Ending bytes: [");
+	if (t <= 19)
+	    QT_COM_TRACE_BUFFER(buffer, t);
+	else
+	    QT_COM_TRACE_BUFFER(buffer+t-19, 19);
+	QT_COM_TRACE_END("]");
+	return false;
     }
-    if (!readReply(1000, 1))
+
+    // If we use readReply() we cannot always know if the last two
+    // bytes in 'buffer' is data belonging to the file or if they are
+    // part of the reply, as readReply does not give the leading \r\n
+    // from the reply in '_buffer'. So we read the full reply into
+    // '_buffer', beginning with six characters.
+    _uart->setTimeout(1000);
+    int r = _uart->readBytes(_buffer, 6);
+
+    // 1. Handle the usual case, were everything works as it should
+    // and we get a reply of 6 bytes containing the ok_reply string.
+    if (r == 6 && memcmp(_buffer, ok_reply, 6) == 0)
     {
-        QT_ERROR("No reply after read");
-        return false;
+	QT_DEBUG("Read OK");
+	return true;
     }
-    return checkResult();
+
+    // 2. Handle the case when we didn't get the whole string of bytes
+    // and a part, or all, of the ok_reply string is in buffer.
+    if (r < 6
+      && memcmp(buffer+length-(6-r), ok_reply, 6-r) == 0
+      && memcmp(_buffer, ok_reply+(6-r), r) == 0)
+    {
+	// This happen when 1500 < length < 1506 and we only get 1500B
+	QT_DEBUG("Only got %dB. Recursing", length-(6-r));
+	seekFileCur(fileHandle, -(6-r));
+	return readFile(fileHandle, buffer+length-(6-r), 6-r);
+    }
+
+    // All other cases are some kind of failures.
+    if (r == 6) // There could be more bytes to read
+    {
+	r += _uart->readBytes(_buffer+r, sizeof(_buffer) - r);
+    }
+
+    if (r <= 19) // A CME ERROR is 19 bytes long
+    {
+	// When we get almost all the bytes and then an error
+	memmove(_buffer + (19-r), _buffer, r);
+	memcpy(_buffer, buffer+length-(19-r), 19-r);
+	_buffer[r] = '\0';
+	if (sscanf(_buffer, "\r\n+CME ERROR: %d\r\n", &err) == 1)
+	{
+	    QT_ERROR("Read failed after %d bytes.", length-(19-r));
+	    QT_ERROR("CME ERROR: %d", err);
+	}
+	else
+	{
+	    QT_ERROR("Unknown error. Total %dB read", t+r);
+	    QT_COM_TRACE_START("Ending bytes: [");
+	    QT_COM_TRACE_BUFFER(_buffer, 19);
+	    QT_COM_TRACE_END("]");
+	}
+	return false;
+    }
+
+    // This should never happen
+    QT_ERROR("Unknown error. Total %dB read", t+r);
+    QT_COM_TRACE_START("Ending bytes: [");
+    QT_COM_TRACE_BUFFER(_buffer + r - 19, 19);
+    QT_COM_TRACE_END("]");
+    return false;
 }
 
 bool QuectelCellular::writeFile(FILE_HANDLE fileHandle, const uint8_t* buffer, uint32_t length)
@@ -914,6 +994,19 @@ bool QuectelCellular::seekFile(FILE_HANDLE fileHandle, uint32_t length)
     // AT+QFSEEK=3000,0,0
     // OK
     sprintf(_buffer,"AT+QFSEEK=%li,%lu,0", fileHandle, length);
+    if (!sendAndCheckReply(_buffer, _OK, 1000))
+    {
+        QT_ERROR("Seek error: %s", _buffer);
+        return false;
+    }
+    return checkResult();
+}
+
+bool QuectelCellular::seekFileCur(FILE_HANDLE fileHandle, int32_t length)
+{
+    // AT+QFSEEK=3000,0,0
+    // OK
+    sprintf(_buffer,"AT+QFSEEK=%li,%li,1", fileHandle, length);
     if (!sendAndCheckReply(_buffer, _OK, 1000))
     {
         QT_ERROR("Seek error: %s", _buffer);
